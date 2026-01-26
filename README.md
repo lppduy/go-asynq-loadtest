@@ -16,6 +16,72 @@ Background job processing with Go, Asynq, and Redis. Includes K6 load testing.
 - ✅ **Docker Support** - Multi-container setup with Docker Compose
 - ✅ **PostgreSQL + GORM** - Persistent data storage with ORM
 
+## ⚠️ POC vs Production Implementation
+
+### Current Status: **Proof of Concept / Demo**
+
+This project demonstrates Asynq task queue architecture and patterns. Task handlers currently **simulate** external service calls for demonstration purposes with `time.Sleep()` and mock responses.
+
+### 🔧 Simulated Services
+
+The following integrations are currently **simulated** (not production-ready):
+
+| Service | Current Status | Production Implementation Needed |
+|---------|---------------|----------------------------------|
+| 💳 **Payment Processing** | `time.Sleep(2s)` + mock success | [Stripe](https://github.com/stripe/stripe-go) / PayPal API integration |
+| 📧 **Email Sending** | Log message only | [SendGrid](https://github.com/sendgrid/sendgrid-go) / AWS SES integration |
+| 📦 **Inventory Update** | Mock in-memory operation | Real database transaction with stock validation |
+| 🧾 **Invoice Generation** | Returns fake URL | PDF generation ([go-pdf](https://github.com/signintech/gopdf)) + S3/GCS upload |
+| 📊 **Analytics Tracking** | No-op (logs only) | Google Analytics / [Mixpanel](https://github.com/mixpanel/mixpanel-go) integration |
+| 🏭 **Warehouse Notification** | No-op (logs only) | Warehouse API call or Kafka/RabbitMQ message |
+
+### 🚀 Converting to Production
+
+To use in production, replace simulation code in `internal/tasks/*.go` with real service integrations.
+
+**Example - Payment Processing (`internal/tasks/payment.go`):**
+
+```go
+// ❌ Current (Simulation):
+time.Sleep(2 * time.Second)
+success := simulatePaymentGateway(payload)  // Always returns true
+
+// ✅ Production (Real Stripe Integration):
+import "github.com/stripe/stripe-go/v75/charge"
+
+stripe.Key = os.Getenv("STRIPE_SECRET_KEY")
+charge, err := charge.New(&stripe.ChargeParams{
+    Amount:   stripe.Int64(int64(payload.Amount * 100)),
+    Currency: stripe.String("usd"),
+    Source:   &stripe.SourceParams{Token: stripe.String(payload.PaymentMethod)},
+})
+if err != nil {
+    return fmt.Errorf("stripe charge failed: %w", err)
+}
+
+// Update order status in database
+return orderRepo.UpdatePaymentStatus(ctx, payload.OrderID, "paid", charge.ID)
+```
+
+**See inline comments in `internal/tasks/*.go` for specific integration recommendations.**
+
+### 📋 Production Checklist
+
+Before deploying to production:
+
+- [ ] Replace all `time.Sleep()` calls with real service integrations
+- [ ] Add proper error handling and validation
+- [ ] Implement idempotency keys for critical operations (payments, inventory)
+- [ ] Add monitoring and alerting for failed tasks
+- [ ] Configure retry policies based on service SLAs
+- [ ] Implement dead letter queue handling
+- [ ] Add comprehensive logging
+- [ ] Set up rate limiting for external API calls
+- [ ] Add unit and integration tests
+- [ ] Configure production environment variables
+- [ ] Set up secrets management (e.g., Vault, AWS Secrets Manager)
+- [ ] Implement circuit breakers for external services
+
 ## 🏗️ Architecture
 
 ```
@@ -398,6 +464,185 @@ REDIS_ADDR=localhost:6379
 # Worker
 WORKER_CONCURRENCY=20
 ```
+
+## 🎚️ Priority Queues - Deep Dive
+
+### How Priority Works in Asynq
+
+Asynq uses a **weighted priority system**, not strict priority. This ensures low-priority tasks eventually get processed.
+
+### Priority Configuration
+
+In `cmd/worker/main.go`:
+
+```go
+srv := asynq.NewServer(
+    redisOpt,
+    asynq.Config{
+        Concurrency: 20,  // Total number of concurrent workers
+        
+        Queues: map[string]int{
+            "critical": 6,  // Weight: 6
+            "high":     4,  // Weight: 4
+            "default":  2,  // Weight: 2
+            "low":      1,  // Weight: 1
+        },
+    },
+)
+```
+
+### How Weights Work
+
+**Weights = Time Allocation Ratio** (NOT strict priority)
+
+```
+Total Weight = 6 + 4 + 2 + 1 = 13
+
+critical queue: 6/13 = ~46% of worker time
+high queue:     4/13 = ~31% of worker time
+default queue:  2/13 = ~15% of worker time
+low queue:      1/13 = ~8% of worker time
+```
+
+### Example Scenario
+
+With `Concurrency: 20` and weights `{critical:6, high:4, default:2, low:1}`:
+
+```
+┌─────────────────────────────────────────────────┐
+│  20 Workers Polling Redis                       │
+├─────────────────────────────────────────────────┤
+│  ⚡ 9-10 workers  → Poll critical queue (46%)   │
+│  🔥 6-7 workers   → Poll high queue (31%)       │
+│  📧 3 workers     → Poll default queue (15%)    │
+│  📊 1-2 workers   → Poll low queue (8%)         │
+└─────────────────────────────────────────────────┘
+```
+
+**Key Points:**
+- ✅ **Not blocking**: Low-priority tasks still get processed
+- ✅ **Fair**: Prevents starvation
+- ✅ **Flexible**: Adjust weights based on business needs
+- ⚠️ **Not strict**: Critical tasks don't always go first
+
+### Setting Task Priority
+
+#### Method 1: Set Queue When Creating Task
+
+```go
+// In internal/tasks/payment.go
+func NewPaymentProcessTask(...) (*asynq.Task, error) {
+    return asynq.NewTask(
+        TypePaymentProcess,
+        payload,
+        asynq.Queue("critical"),  // ← Specify queue here
+        asynq.MaxRetry(3),
+        asynq.Timeout(30*time.Second),
+    ), nil
+}
+```
+
+#### Method 2: Set Queue When Enqueueing
+
+```go
+// In handler
+task, _ := tasks.NewPaymentProcessTask(...)
+
+// Override queue at enqueue time
+info, err := client.Enqueue(
+    task,
+    asynq.Queue("critical"),  // ← Can override here
+)
+```
+
+#### Method 3: Default Queue
+
+```go
+// If no queue specified, uses "default" queue
+task := asynq.NewTask(TypeSomeTask, payload)
+client.Enqueue(task)  // Goes to "default" queue
+```
+
+### Priority Recommendations
+
+| Queue | Use Cases | Timeout | Retry |
+|-------|-----------|---------|-------|
+| **critical** | Payment processing, refunds, auth | 30s | 3-5 |
+| **high** | Inventory updates, order status | 15s | 3 |
+| **default** | Emails, notifications, invoices | 20s | 5 |
+| **low** | Analytics, logs, cleanup, reports | 10s | 2 |
+
+### Advanced: Dynamic Priority
+
+You can dynamically assign priority based on business logic:
+
+```go
+func (h *OrderHandler) enqueuePaymentTask(order *domain.Order) {
+    queue := "default"
+    
+    // High-value orders get critical priority
+    if order.TotalAmount > 10000 {
+        queue = "critical"
+    } else if order.TotalAmount > 1000 {
+        queue = "high"
+    }
+    
+    task, _ := tasks.NewPaymentProcessTask(...)
+    h.asynqClient.Enqueue(task, asynq.Queue(queue))
+}
+```
+
+### Tuning Priority Weights
+
+**Example 1: Payment-Critical Business**
+```go
+Queues: map[string]int{
+    "critical": 10,  // 77% - Focus on payments
+    "high":     2,   // 15%
+    "default":  1,   // 8%
+    "low":      0,   // 0% - Disabled (won't process)
+}
+```
+
+**Example 2: Balanced Processing**
+```go
+Queues: map[string]int{
+    "critical": 4,  // 40%
+    "high":     3,  // 30%
+    "default":  2,  // 20%
+    "low":      1,  // 10%
+}
+```
+
+**Example 3: Equal Priority**
+```go
+Queues: map[string]int{
+    "critical": 1,  // 25%
+    "high":     1,  // 25%
+    "default":  1,  // 25%
+    "low":      1,  // 25%
+}
+```
+
+### Monitoring Queue Performance
+
+Check Asynqmon dashboard (http://localhost:8085):
+- **Queue Depth**: Number of pending tasks
+- **Processing Time**: Average task duration
+- **Success Rate**: Completed vs failed tasks
+
+If you see:
+- ❌ **Critical queue growing**: Increase critical weight or concurrency
+- ❌ **Low queue never processed**: Increase low weight
+- ❌ **High latency**: Increase overall concurrency
+
+### Best Practices
+
+1. **Start Conservative**: Use default weights `{6,4,2,1}` first
+2. **Monitor & Adjust**: Watch queue depths and adjust weights
+3. **Business-Driven**: Priority should match business impact
+4. **Avoid Weight 0**: Setting weight to 0 disables the queue entirely
+5. **Consider SLAs**: Payment (seconds), Email (minutes), Analytics (hours)
 
 ## 📚 Documentation
 
