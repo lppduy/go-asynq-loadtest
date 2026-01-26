@@ -49,39 +49,39 @@ Hardware:
 ![Basic Load Test Results](screenshots/basic-load-k6.png)
 
 **Key Metrics:**
-- **Total Requests:** 17,592
-- **Throughput:** 72.94 req/s
-- **Response Time (avg):** 9.82ms ⚡
-- **Response Time (p95):** 45.40ms ✅
-- **Response Time (min):** 0.09ms
-- **Response Time (max):** 246.29ms
+- **Total Requests:** 17,620
+- **Throughput:** 73.18 req/s
+- **Response Time (avg):** 9.15ms ⚡
+- **Response Time (p95):** 41.89ms ✅
+- **Response Time (min):** 0.08ms
+- **Response Time (max):** 224.59ms
 - **Error Rate:** 0.00% 🎯
 - **Failed Requests:** 0
 - **Max Virtual Users:** 50
-- **Duration:** 4m01.2s
-- **Iterations:** 4,398 completed
+- **Duration:** 4m00.8s
+- **Iterations:** 4,405 completed
 
 ### Asynqmon Dashboard
 
 <!-- Screenshot: Asynqmon showing queue stats -->
 ![Asynqmon Queue Stats](screenshots/basic-load-asynqmon.png)
 
-**Note:** Screenshot taken immediately after K6 test completion, showing worker continuing to process background tasks asynchronously (as designed).
+**Note:** Screenshot taken immediately after K6 test completion. Task retention is enabled, so completed tasks are visible in Asynqmon.
 
 **Queue Processing:**
 
 | Queue | Size (Pending) | Processed | Failed | Latency | Memory | Error Rate |
 |-------|----------------|-----------|--------|---------|---------|------------|
-| **Critical** | 2,946 | 1,452 | 0 | 2m15.13s | 1.58 MB | 0.00% |
-| **High** | 3,441 | 957 | 0 | 2m40.22s | 1.82 MB | 0.00% |
-| **Default** | 8,276 | 520 | 0 | 3m15.31s | 4.93 MB | 0.00% |
-| **Low** | 8,543 | 253 | 0 | 3m25.32s | 5.29 MB | 0.00% |
+| **Critical** | 4,405 | 1,438 | 0 | 2m20.2s | 2.37 MB | 0.00% |
+| **High** | 4,405 | 1,020 | 0 | 2m40.27s | 2.34 MB | 0.00% |
+| **Default** | 8,810 | 517 | 0 | 3m20.39s | 5.26 MB | 0.00% |
+| **Low** | 8,810 | 271 | 0 | 3m25.4s | 5.48 MB | 0.00% |
 
 **Key Findings:**
-- ✅ **Priority queue working perfectly:** Critical processed most (1,452), Low processed least (253)
+- ✅ **Priority queue working correctly:** Critical processed most (1,438), Low processed least (271)
 - ✅ **Zero failures** across all queues - 100% success rate
 - ✅ **Worker handling tasks efficiently:** Processing in correct priority order (6:4:2:1 ratio)
-- ✅ **Latency increases with lower priority:** Critical (2m15s) < High (2m40s) < Default (3m15s) < Low (3m25s)
+- ✅ **Latency increases with lower priority:** Critical (2m20s) < High (2m40s) < Default (3m20s) < Low (3m25s)
 - ✅ **All 6 task types** (payment, inventory, email, invoice, analytics, warehouse) processed successfully
 - ✅ **System stable under sustained load:** 50 concurrent users, zero errors
 - ✅ **Queue backlog is normal:** Tasks continue processing after API requests complete (async architecture working as designed)
