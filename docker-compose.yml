@@ -39,14 +39,15 @@ services:
       - asynq-network
 
   # Asynqmon - Web UI for monitoring
+  # Note: Using platform flag for ARM64 (Mac M1/M2) compatibility via Rosetta 2
   asynqmon:
     image: hibiken/asynqmon:latest
+    platform: linux/amd64  # Force AMD64 emulation on ARM64
     container_name: asynqmon
     ports:
       - "8085:8080"
     environment:
       - REDIS_ADDR=redis:6379
-      - PROMETHEUS_ADDR=http://prometheus:9090
     depends_on:
       redis:
         condition: service_healthy
@@ -54,48 +55,9 @@ services:
       - asynq-network
     restart: unless-stopped
 
-  # Prometheus - Metrics collection
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: asynq-prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-    networks:
-      - asynq-network
-    restart: unless-stopped
-
-  # Grafana - Metrics visualization
-  grafana:
-    image: grafana/grafana:latest
-    container_name: asynq-grafana
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards
-      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources
-    depends_on:
-      - prometheus
-    networks:
-      - asynq-network
-    restart: unless-stopped
-
 volumes:
   redis_data:
   postgres_data:
-  prometheus_data:
-  grafana_data:
 
 networks:
   asynq-network:
