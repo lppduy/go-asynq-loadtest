@@ -1,6 +1,6 @@
 # Go Asynq Load Test
 
-Production-grade background job processing system built with Go, Gin, Asynq, and Redis. Includes comprehensive load testing with K6.
+Background job processing with Go, Asynq, and Redis. Includes K6 load testing.
 
 ## 🎯 Features
 
