@@ -2,11 +2,13 @@
 
 Background job processing with Go, Asynq, and Redis. Includes K6 load testing.
 
+**Use Case:** E-commerce Order Processing System
+
 ## 🎯 Features
 
-- ✅ **REST API** - Gin framework with clean architecture
-- ✅ **Background Jobs** - Asynq task queue with Redis
-- ✅ **Priority Queues** - Critical, default, and low priority
+- ✅ **REST API** - Order processing with Gin framework
+- ✅ **Background Jobs** - Async payment, email, inventory, invoice generation
+- ✅ **Priority Queues** - Critical (payment), high (inventory), default (email), low (analytics)
 - ✅ **Task Scheduling** - Delayed and periodic tasks
 - ✅ **Load Testing** - K6 scripts for performance testing
 - ✅ **Monitoring** - Asynqmon dashboard, Prometheus metrics
@@ -15,10 +17,32 @@ Background job processing with Go, Asynq, and Redis. Includes K6 load testing.
 ## 🏗️ Architecture
 
 ```
-┌─────────────┐     ┌──────────┐     ┌─────────────┐
-│   HTTP API  │────▶│  Redis   │◀────│   Workers   │
-│  (Producer) │     │ (Asynq)  │     │ (Consumers) │
-└─────────────┘     └──────────┘     └─────────────┘
+                  HTTP Request
+                       ↓
+┌──────────────────────────────────────────────────┐
+│                 API Server (Gin)                  │
+│  POST /orders → Create order (50ms response)     │
+└─────────────────────┬────────────────────────────┘
+                      │
+                      ↓ Enqueue background tasks
+┌──────────────────────────────────────────────────┐
+│              Redis (Task Queue)                   │
+│  [Critical] payment:process                       │
+│  [High]     inventory:update                      │
+│  [Default]  email:confirmation, invoice:generate  │
+│  [Low]      analytics:track, warehouse:notify     │
+└─────────────────────┬────────────────────────────┘
+                      │
+                      ↓ Process async
+┌──────────────────────────────────────────────────┐
+│             Workers (Background)                  │
+│  • Process payment (2s)                           │
+│  • Update inventory (500ms)                       │
+│  • Send confirmation email (1s)                   │
+│  • Generate invoice PDF (3s)                      │
+│  • Track analytics (200ms)                        │
+│  • Notify warehouse (500ms)                       │
+└──────────────────────────────────────────────────┘
 ```
 
 ## 📂 Project Structure
@@ -26,26 +50,38 @@ Background job processing with Go, Asynq, and Redis. Includes K6 load testing.
 ```
 go-asynq-loadtest/
 ├── cmd/
-│   ├── api/              # HTTP API server (producer)
-│   └── worker/           # Background workers (consumer)
+│   ├── api/              # HTTP API server (order processing)
+│   └── worker/           # Background workers (payment, email, etc)
 ├── internal/
-│   ├── config/           # Configuration management
-│   ├── domain/           # Business entities
+│   ├── domain/           # Order, OrderItem, Address models
 │   ├── dto/              # Request/Response DTOs
-│   ├── handler/          # HTTP handlers
-│   ├── middleware/       # HTTP middleware
-│   ├── repository/       # Data access layer
-│   ├── service/          # Business logic
-│   └── tasks/            # Asynq task definitions
+│   ├── handler/          # HTTP handlers (order_handler.go)
+│   ├── repository/       # In-memory data storage
+│   ├── service/          # Business logic (order_service.go)
+│   ├── middleware/       # HTTP middleware (auth, logging, CORS)
+│   ├── tasks/            # Asynq task definitions & handlers
+│   └── config/           # Configuration management
 ├── pkg/
-│   ├── logger/           # Logging utilities
-│   └── monitoring/       # Metrics & monitoring
+│   ├── logger/           # Structured logging
+│   └── monitoring/       # Prometheus metrics
 ├── loadtest/             # K6 load test scripts
-├── migrations/           # Database migrations
+├── migrations/           # Database migrations (future)
 ├── docker-compose.yml    # Multi-container setup
 ├── Makefile              # Build automation
 └── README.md
 ```
+
+## 📡 API Endpoints
+
+### Orders
+- `POST /api/v1/orders` - Create new order
+- `GET /api/v1/orders` - List all orders (query: `?customer_id=xxx`)
+- `GET /api/v1/orders/:id` - Get order details
+- `GET /api/v1/orders/:id/status` - Get order status
+- `POST /api/v1/orders/:id/cancel` - Cancel order
+
+### Health
+- `GET /health` - Health check endpoint
 
 ## 🚀 Quick Start
 
@@ -110,6 +146,58 @@ go run cmd/worker/main.go
 - **Asynqmon**: http://localhost:8085 (Monitor tasks & queues)
 - **Prometheus**: http://localhost:9090 (Metrics)
 - **Grafana**: http://localhost:3000 (Dashboards - admin/admin)
+
+### 7. Test API with cURL
+
+```bash
+# Health check
+curl http://localhost:8080/health
+
+# Create order
+curl -X POST http://localhost:8080/api/v1/orders \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "cust-123",
+    "customer_email": "customer@example.com",
+    "items": [
+      {
+        "product_id": "prod-1",
+        "product_name": "Laptop",
+        "quantity": 1,
+        "unit_price": 1200.00
+      },
+      {
+        "product_id": "prod-2",
+        "product_name": "Mouse",
+        "quantity": 2,
+        "unit_price": 25.00
+      }
+    ],
+    "shipping_address": {
+      "street": "123 Main St",
+      "city": "San Francisco",
+      "state": "CA",
+      "postal_code": "94102",
+      "country": "USA"
+    },
+    "payment_method": "credit_card",
+    "notes": "Please deliver before 5 PM"
+  }'
+
+# List orders
+curl http://localhost:8080/api/v1/orders
+
+# Get order by ID (replace ORD-xxx with actual order ID)
+curl http://localhost:8080/api/v1/orders/ORD-12345678
+
+# Get order status
+curl http://localhost:8080/api/v1/orders/ORD-12345678/status
+
+# Cancel order
+curl -X POST http://localhost:8080/api/v1/orders/ORD-12345678/cancel \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "Customer changed their mind"}'
+```
 
 ## 📊 Load Testing
 
