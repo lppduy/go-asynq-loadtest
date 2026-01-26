@@ -194,6 +194,48 @@ k6 run loadtest/spike-test.js
 
 ---
 
+## 🧹 **Clean Environment Between Tests**
+
+### **Why Clean?**
+
+Between tests, you should reset the environment to ensure:
+- ✅ No leftover data in PostgreSQL
+- ✅ No pending tasks in Redis
+- ✅ Fresh metrics (not cumulative)
+- ✅ Consistent baseline for each test
+
+### **How to Clean:**
+
+```bash
+# Stop all infrastructure and remove volumes
+docker-compose down -v
+
+# Start fresh
+docker-compose up -d
+
+# Wait for services to be ready
+sleep 10
+
+# Restart API and Worker
+# Terminal 1: go run cmd/api/main.go
+# Terminal 2: go run cmd/worker/main.go
+```
+
+### **When to Clean:**
+
+```bash
+# After each test type
+k6 run loadtest/basic-load.js
+docker-compose down -v && docker-compose up -d  # ← Clean here
+k6 run loadtest/stress-test.js
+docker-compose down -v && docker-compose up -d  # ← Clean here
+k6 run loadtest/spike-test.js
+```
+
+**Note:** You don't need to rebuild Go applications, only reset Docker services.
+
+---
+
 ## 📊 **Understanding K6 Output**
 
 ### **Key Metrics:**

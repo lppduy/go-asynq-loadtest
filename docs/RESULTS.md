@@ -10,8 +10,9 @@ Performance results from K6 load tests with screenshots.
 
 ```yaml
 Worker:
-  - Processes: 1
-  - Concurrency: 20 goroutines
+  - Processes: 1 worker process
+  - Concurrency: 20 goroutines per process
+  - Total Capacity: 20 tasks simultaneously
   - Queue Weights:
       critical: 6
       high: 4
