@@ -1,6 +1,6 @@
-# 📊 Load Testing với K6
+# 📊 Load Testing with K6
 
-Complete guide về load testing cho Asynq Order Processing system.
+Complete guide for load testing the Asynq Order Processing system.
 
 ---
 
@@ -105,13 +105,31 @@ docker run --rm -i --network=host grafana/k6 run - <loadtest/basic-load.js
 
 ## 🚀 **Run Tests**
 
+### ⚠️ **IMPORTANT: Clean Environment Before Each Test**
+
+**Always clean between tests to ensure accurate, non-cumulative results:**
+
+```bash
+# Stop and remove all data
+docker-compose down -v
+
+# Start fresh
+docker-compose up -d
+
+# Wait for services to be ready
+sleep 10
+```
+
+---
+
 ### **Before running tests:**
 
 Make sure system is running (see [README.md](../README.md#quick-start)):
 
 ```bash
-# 1. Start infrastructure
-docker-compose up -d
+# 1. Clean and start infrastructure (if not done above)
+docker-compose down -v && docker-compose up -d
+sleep 10
 
 # 2. Start API (Terminal 1)
 go run cmd/api/main.go
@@ -171,6 +189,11 @@ default ✓ [======================================] 00/50 VUs  4m0s
 ### **Run Stress Test:**
 
 ```bash
+# IMPORTANT: Clean first!
+docker-compose down -v && docker-compose up -d
+sleep 10
+
+# Then restart API and Worker before running:
 k6 run loadtest/stress-test.js
 ```
 
@@ -184,6 +207,11 @@ k6 run loadtest/stress-test.js
 ### **Run Spike Test:**
 
 ```bash
+# IMPORTANT: Clean first!
+docker-compose down -v && docker-compose up -d
+sleep 10
+
+# Then restart API and Worker before running:
 k6 run loadtest/spike-test.js
 ```
 
@@ -256,8 +284,8 @@ vus_max..................: 50
 http_req_duration........: avg=45ms min=12ms max=234ms p(95)=89ms p(99)=145ms
 ```
 - **avg:** Average response time
-- **p(95):** 95% requests nhanh hơn giá trị này
-- **p(99):** 99% requests nhanh hơn giá trị này
+- **p(95):** 95% of requests are faster than this value
+- **p(99):** 99% of requests are faster than this value
 
 **Good values:**
 - avg < 100ms (excellent)
@@ -336,7 +364,7 @@ export default function () {
 }
 ```
 
-**Example:** 50 VUs với sleep(1):
+**Example:** 50 VUs with sleep(1):
 - Each VU: 1 request/second
 - Total: ~50 requests/second
 

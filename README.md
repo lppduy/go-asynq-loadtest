@@ -155,6 +155,18 @@ Watch the 6 background tasks being processed in real-time!
 
 ## 📊 Load Testing
 
+### ⚠️ Clean Environment Before Each Test
+
+**Important:** Reset data between tests for accurate, non-cumulative results:
+
+```bash
+docker-compose down -v && docker-compose up -d
+sleep 10
+# Then restart API and Worker
+```
+
+---
+
 ### Run Basic Load Test (50 users, 4 minutes)
 
 ```bash
@@ -172,6 +184,9 @@ http_req_duration: avg=10.16ms p(95)=44.97ms
 ### Run Stress Test (Find Breaking Point)
 
 ```bash
+# Clean first!
+docker-compose down -v && docker-compose up -d && sleep 10
+
 k6 run loadtest/stress-test.js
 ```
 
@@ -180,6 +195,9 @@ Gradually increases from 0 → 400 users to find system limits.
 ### Run Spike Test (Sudden Traffic Spike)
 
 ```bash
+# Clean first!
+docker-compose down -v && docker-compose up -d && sleep 10
+
 k6 run loadtest/spike-test.js
 ```
 
