@@ -189,76 +189,10 @@ Tests recovery from sudden 10 → 200 users spike.
 
 ---
 
-## 📈 Benchmark Results
+## 📈 Performance Results
 
-Results from `k6 run loadtest/basic-load.js`:
+See load testing results with screenshots: **[docs/RESULTS.md](docs/RESULTS.md)**
 
-### Test Configuration
-
-```yaml
-Test Duration: 4 minutes
-Load Pattern:
-  - Ramp up: 0 → 20 users (30s)
-  - Ramp up: 20 → 50 users (1m)
-  - Sustained: 50 users (2m)
-  - Ramp down: 50 → 0 users (30s)
-
-Worker Configuration:
-  - Workers: 1 process
-  - Concurrency: 20 (20 concurrent goroutines)
-  - Priority Queues:
-      critical: weight 6
-      high: weight 4
-      default: weight 2
-      low: weight 1
-
-Hardware:
-  - CPU: Apple M1/M2 (or equivalent)
-  - RAM: 8GB+
-  - Database: PostgreSQL 15 (Docker)
-  - Queue: Redis 7 (Docker)
-```
-
-### Performance Metrics
-
-| Metric | Value | Target | Status |
-|--------|-------|--------|--------|
-| **Response Time (avg)** | 10.16ms | < 100ms | ✅ Excellent |
-| **Response Time (p95)** | 44.97ms | < 200ms | ✅ Excellent |
-| **Response Time (p99)** | ~70ms | < 500ms | ✅ Excellent |
-| **Throughput** | 73 req/s | 50+ req/s | ✅ Good |
-| **Error Rate** | 0% | < 1% | ✅ Perfect |
-| **Total Requests** | 17,556 | - | ✅ |
-| **Success Rate** | 100% | > 99% | ✅ Perfect |
-
-### Task Processing
-
-| Queue | Tasks | Avg Time | Success Rate |
-|-------|-------|----------|--------------|
-| **Critical** (payment) | 4,389 | ~2s | 100% |
-| **High** (inventory) | 4,389 | ~500ms | 100% |
-| **Default** (email, invoice) | 8,778 | ~1-3s | 100% |
-| **Low** (analytics, warehouse) | 8,778 | ~200-500ms | 100% |
-
-**Total Background Tasks:** 26,334 (6 tasks per order × 4,389 orders)
-
-### Key Observations
-
-- ✅ API responds instantly (~10ms avg) without waiting for background tasks
-- ✅ All 26,334 background tasks processed successfully
-- ✅ No queue backlog (workers processed tasks faster than enqueue rate)
-- ✅ Priority queues working correctly (critical tasks processed first)
-- ✅ Zero errors with automatic retry enabled
-
-### Scaling Potential
-
-Based on results:
-- **Current capacity:** 73 req/s with 1 worker (20 concurrency)
-- **Estimated with 3 workers:** ~200+ req/s
-- **Estimated with 5 workers:** ~350+ req/s
-- **Bottleneck:** Worker processing (not API or database)
-
-**To scale further:** Run `k6 run loadtest/stress-test.js` to find exact breaking point.
 
 ---
 

@@ -57,5 +57,8 @@ loadtest/results/*.json
 loadtest/results/*.html
 !loadtest/results/.gitkeep
 
+# Screenshots (keep in git for documentation)
+# docs/screenshots/*.png  # Uncomment to ignore screenshots
+
 # Docker volumes
 data/
