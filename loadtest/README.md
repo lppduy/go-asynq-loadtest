@@ -4,11 +4,11 @@ Complete guide về load testing cho Asynq Order Processing system.
 
 ---
 
-## 🎯 **Load Testing là gì?**
+## 🎯 **What is Load Testing?**
 
-**Load testing** = Test hệ thống với traffic giả lập để:
-- 📈 Tìm performance limits (bao nhiêu users max?)
-- 🐛 Phát hiện bottlenecks (DB? Redis? Worker?)
+**Load testing** = Testing the system with simulated traffic to:
+- 📈 Find performance limits (how many concurrent users?)
+- 🐛 Identify bottlenecks (DB? Redis? Worker?)
 - 🔥 Verify system stability under load
 - 📊 Measure response times & throughput
 
@@ -45,7 +45,7 @@ docker run --rm -i --network=host grafana/k6 run - <loadtest/basic-load.js
 ## 📁 **Test Scripts**
 
 ### **1. basic-load.js** - Baseline Performance
-**Mục đích:** Test performance với normal load
+**Purpose:** Test performance with normal load
 
 **Profile:**
 ```
@@ -63,7 +63,7 @@ docker run --rm -i --network=host grafana/k6 run - <loadtest/basic-load.js
 ---
 
 ### **2. stress-test.js** - Find Breaking Point
-**Mục đích:** Tăng dần load cho đến khi system bị stress
+**Purpose:** Gradually increase load until system reaches stress point
 
 **Profile:**
 ```
@@ -83,7 +83,7 @@ docker run --rm -i --network=host grafana/k6 run - <loadtest/basic-load.js
 ---
 
 ### **3. spike-test.js** - Sudden Traffic Spike
-**Mục đích:** Test recovery from sudden traffic spike
+**Purpose:** Test recovery from sudden traffic spike
 
 **Profile:**
 ```
@@ -105,7 +105,7 @@ docker run --rm -i --network=host grafana/k6 run - <loadtest/basic-load.js
 
 ## 🚀 **Run Tests**
 
-### **Trước khi test:**
+### **Before running tests:**
 
 1. **Start infrastructure:**
 ```bash
@@ -209,8 +209,8 @@ k6 run loadtest/spike-test.js
 vus......................: 50   min=0    max=50
 vus_max..................: 50
 ```
-- **Nghĩa:** Số concurrent users đang test
-- **Good:** Theo profile định trước
+- **Meaning:** Number of concurrent users being simulated
+- **Good:** Matches predefined profile
 - **Bad:** VUs drop unexpectedly (K6 crashed)
 
 ---
@@ -239,7 +239,7 @@ http_req_duration........: avg=45ms min=12ms max=234ms p(95)=89ms p(99)=145ms
 ```
 http_reqs................: 4936   20.56/s
 ```
-- **Nghĩa:** Requests per second (throughput)
+- **Meaning:** Requests per second (throughput)
 - **Good:** High & stable
 - **Bad:** Drops during test (bottleneck)
 
@@ -333,12 +333,12 @@ VUs
 
 ```javascript
 thresholds: {
-  'http_req_duration': ['p(95)<500'],  // FAIL if p95 > 500ms
-  'http_req_failed': ['rate<0.05'],    // FAIL if errors > 5%
+  'http_req_duration': ['p(95)<500'],  // Test FAILS if p95 > 500ms
+  'http_req_failed': ['rate<0.05'],    // Test FAILS if error rate > 5%
 }
 ```
 
-**Use:** Automated pass/fail criteria (CI/CD)
+**Use case:** Automated pass/fail criteria for CI/CD pipelines
 
 ---
 
@@ -408,9 +408,9 @@ docker stats
 
 ## 📈 **Performance Tuning Tips**
 
-### **If response time is slow:**
+### **If response times are slow:**
 
-1. **Check worker concurrency:**
+1. **Increase worker concurrency:**
 ```go
 // cmd/worker/main.go
 Concurrency: 20  // ← Try 50, 100
@@ -465,33 +465,33 @@ Worker backlog?
 ## 🎓 **Load Test Best Practices**
 
 ### **1. Start Small**
-- Begin with basic-load.js
-- Establish baseline
-- Then stress test
+- Begin with `basic-load.js` to establish baseline
+- Understand normal behavior first
+- Then move to stress testing
 
 ### **2. Monitor Everything**
-- Asynqmon (queue depth)
-- API logs (errors)
-- Worker logs (processing)
-- Docker stats (resources)
+- **Asynqmon:** Queue depth and task processing
+- **API logs:** Error messages and slow queries
+- **Worker logs:** Task execution and retries
+- **Docker stats:** Resource utilization (CPU, memory)
 
 ### **3. Test Realistic Scenarios**
-- Use real data sizes
-- Mix different operations
-- Include think time (sleep)
+- Use realistic payload sizes
+- Mix different operations (GET, POST)
+- Include think time (user delay simulation)
 
 ### **4. Incremental Tuning**
-- Change one thing at a time
-- Measure impact
-- Document results
+- Change ONE variable at a time
+- Measure the impact
+- Document all changes and results
 
 ### **5. Define Success Criteria**
 ```
-Example:
-✅ Support 100 req/s
-✅ p95 < 200ms
+Example targets:
+✅ Support 100 req/s sustained throughput
+✅ p95 response time < 200ms
 ✅ Error rate < 1%
-✅ Queue depth < 1000
+✅ Queue depth stays < 1000 tasks
 ```
 
 ---
@@ -515,6 +515,14 @@ loadtest/results/
 ├── stress-test-summary.json
 └── spike-test-summary.json
 ```
+
+---
+
+## 📚 **Additional Resources**
+
+- [K6 Documentation](https://k6.io/docs/)
+- [K6 Examples](https://k6.io/docs/examples/)
+- [Asynq Monitoring Guide](https://github.com/hibiken/asynq/wiki/Monitoring)
 
 ---
 

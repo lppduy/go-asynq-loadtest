@@ -8,13 +8,13 @@ const errorRate = new Rate('errors');
 // Test configuration
 export const options = {
   stages: [
-    { duration: '30s', target: 20 },  // Ramp up: 0 → 20 users trong 30s
-    { duration: '1m', target: 50 },   // Ramp up: 20 → 50 users trong 1m
-    { duration: '2m', target: 50 },   // Stay: 50 users trong 2m (peak load)
-    { duration: '30s', target: 0 },   // Ramp down: 50 → 0 users trong 30s
+    { duration: '30s', target: 20 },  // Ramp up: 0 → 20 users in 30s
+    { duration: '1m', target: 50 },   // Ramp up: 20 → 50 users in 1m
+    { duration: '2m', target: 50 },   // Stay: 50 users for 2m (peak load)
+    { duration: '30s', target: 0 },   // Ramp down: 50 → 0 users in 30s
   ],
   thresholds: {
-    'http_req_duration': ['p(95)<500'], // 95% requests phải < 500ms
+    'http_req_duration': ['p(95)<500'], // 95% of requests must be < 500ms
     'http_req_failed': ['rate<0.05'],   // Error rate < 5%
     'errors': ['rate<0.1'],             // Custom error < 10%
   },
@@ -47,7 +47,7 @@ function generateOrder(userId) {
   };
 }
 
-// Main test function - K6 sẽ chạy function này cho mỗi virtual user
+// Main test function - K6 runs this for each virtual user
 export default function () {
   const userId = Math.floor(Math.random() * 10000);
   
@@ -127,7 +127,7 @@ export default function () {
   sleep(0.5);
 }
 
-// Summary function (hiển thị khi test xong)
+// Summary function (displayed when test completes)
 export function handleSummary(data) {
   return {
     'stdout': textSummary(data, { indent: ' ', enableColors: true }),
