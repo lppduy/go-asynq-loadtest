@@ -22,65 +22,7 @@ Background job processing with Go, Asynq, and Redis. Includes K6 load testing.
 
 This project demonstrates Asynq task queue architecture and patterns. Task handlers currently **simulate** external service calls for demonstration purposes with `time.Sleep()` and mock responses.
 
-### 🔧 Simulated Services
-
-The following integrations are currently **simulated** (not production-ready):
-
-| Service | Current Status | Production Implementation Needed |
-|---------|---------------|----------------------------------|
-| 💳 **Payment Processing** | `time.Sleep(2s)` + mock success | [Stripe](https://github.com/stripe/stripe-go) / PayPal API integration |
-| 📧 **Email Sending** | Log message only | [SendGrid](https://github.com/sendgrid/sendgrid-go) / AWS SES integration |
-| 📦 **Inventory Update** | Mock in-memory operation | Real database transaction with stock validation |
-| 🧾 **Invoice Generation** | Returns fake URL | PDF generation ([go-pdf](https://github.com/signintech/gopdf)) + S3/GCS upload |
-| 📊 **Analytics Tracking** | No-op (logs only) | Google Analytics / [Mixpanel](https://github.com/mixpanel/mixpanel-go) integration |
-| 🏭 **Warehouse Notification** | No-op (logs only) | Warehouse API call or Kafka/RabbitMQ message |
-
-### 🚀 Converting to Production
-
-To use in production, replace simulation code in `internal/tasks/*.go` with real service integrations.
-
-**Example - Payment Processing (`internal/tasks/payment.go`):**
-
-```go
-// ❌ Current (Simulation):
-time.Sleep(2 * time.Second)
-success := simulatePaymentGateway(payload)  // Always returns true
-
-// ✅ Production (Real Stripe Integration):
-import "github.com/stripe/stripe-go/v75/charge"
-
-stripe.Key = os.Getenv("STRIPE_SECRET_KEY")
-charge, err := charge.New(&stripe.ChargeParams{
-    Amount:   stripe.Int64(int64(payload.Amount * 100)),
-    Currency: stripe.String("usd"),
-    Source:   &stripe.SourceParams{Token: stripe.String(payload.PaymentMethod)},
-})
-if err != nil {
-    return fmt.Errorf("stripe charge failed: %w", err)
-}
-
-// Update order status in database
-return orderRepo.UpdatePaymentStatus(ctx, payload.OrderID, "paid", charge.ID)
-```
-
-**See inline comments in `internal/tasks/*.go` for specific integration recommendations.**
-
-### 📋 Production Checklist
-
-Before deploying to production:
-
-- [ ] Replace all `time.Sleep()` calls with real service integrations
-- [ ] Add proper error handling and validation
-- [ ] Implement idempotency keys for critical operations (payments, inventory)
-- [ ] Add monitoring and alerting for failed tasks
-- [ ] Configure retry policies based on service SLAs
-- [ ] Implement dead letter queue handling
-- [ ] Add comprehensive logging
-- [ ] Set up rate limiting for external API calls
-- [ ] Add unit and integration tests
-- [ ] Configure production environment variables
-- [ ] Set up secrets management (e.g., Vault, AWS Secrets Manager)
-- [ ] Implement circuit breakers for external services
+See inline comments in `internal/tasks/*.go` for specific integration recommendations.
 
 ## 🏗️ Architecture
 
