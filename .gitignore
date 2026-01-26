@@ -52,10 +52,10 @@ temp/
 # Air (live reload tool)
 tmp/
 
-# K6 test results
-k6-results/
-*.json
-*.html
+# Load test results
+loadtest/results/*.json
+loadtest/results/*.html
+!loadtest/results/.gitkeep
 
 # Docker volumes
 data/
