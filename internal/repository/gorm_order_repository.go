@@ -9,6 +9,21 @@ import (
 	"github.com/lppduy/go-asynq-loadtest/internal/domain"
 )
 
+// OrderRepository defines the interface for order data operations
+type OrderRepository interface {
+	Create(ctx context.Context, order *domain.Order) error
+	FindByID(ctx context.Context, id string) (*domain.Order, error)
+	FindByCustomerID(ctx context.Context, customerID string) ([]*domain.Order, error)
+	Update(ctx context.Context, order *domain.Order) error
+	Delete(ctx context.Context, id string) error
+	FindAll(ctx context.Context) ([]*domain.Order, error)
+}
+
+// Common errors
+var (
+	ErrOrderNotFound = errors.New("order not found")
+)
+
 // GormOrderRepository implements OrderRepository using GORM
 type GormOrderRepository struct {
 	db *gorm.DB
