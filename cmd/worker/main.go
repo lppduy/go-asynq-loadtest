@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"os/signal"
@@ -34,25 +35,22 @@ func main() {
 			// Number of concurrent workers
 			Concurrency: cfg.Worker.Concurrency,
 
-			// Queue priority (higher number = higher priority)
-			Queues: map[string]int{
-				"critical": 6, // Highest priority (payment processing)
-				"high":     4, // High priority (inventory updates)
-				"default":  2, // Default priority (emails, invoices)
-				"low":      1, // Low priority (analytics, notifications)
-			},
-
-			// Error handling
-			ErrorHandler: asynq.ErrorHandlerFunc(func(ctx any, task *asynq.Task, err error) {
-				log.Printf("❌ [Error] Task %s failed: %v", task.Type(), err)
-			}),
-
-			// Retry configuration
-			RetryDelayFunc: asynq.DefaultRetryDelayFunc,
-
-			// Logger
-			Logger: log.New(os.Stdout, "[asynq] ", log.LstdFlags),
+		// Queue priority (higher number = higher priority)
+		Queues: map[string]int{
+			"critical": 6, // Highest priority (payment processing)
+			"high":     4, // High priority (inventory updates)
+			"default":  2, // Default priority (emails, invoices)
+			"low":      1, // Low priority (analytics, notifications)
 		},
+
+		// Error handling
+		ErrorHandler: asynq.ErrorHandlerFunc(func(ctx context.Context, task *asynq.Task, err error) {
+			log.Printf("❌ [Error] Task %s failed: %v", task.Type(), err)
+		}),
+
+		// Retry configuration
+		RetryDelayFunc: asynq.DefaultRetryDelayFunc,
+	},
 	)
 
 	// Create task multiplexer (router)
