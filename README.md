@@ -193,7 +193,6 @@ Tests recovery from sudden 10 → 200 users spike.
 
 See load testing results with screenshots: **[docs/RESULTS.md](docs/RESULTS.md)**
 
-
 ---
 
 ## 📡 API Endpoints
