@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/lppduy/go-asynq-loadtest/internal/domain"
+	"github.com/lppduy/go-asynq-loadtest/internal/repository"
 )
 
 // Task type constants
@@ -42,6 +44,48 @@ func NewPaymentProcessTask(orderID string, amount float64, paymentMethod string)
 		asynq.Queue("critical"),              // Use critical queue
 		asynq.ProcessIn(2*time.Second),       // Process after 2 seconds (simulate delay)
 	), nil
+}
+
+// NewPaymentProcessHandler returns a handler that also updates order status in PostgreSQL.
+func NewPaymentProcessHandler(orderRepo repository.OrderRepository) func(context.Context, *asynq.Task) error {
+	return func(ctx context.Context, t *asynq.Task) error {
+		var payload PaymentPayload
+		if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+			return fmt.Errorf("failed to unmarshal payment payload: %w", err)
+		}
+
+		// Mark payment as processing immediately so orders don't remain "pending"
+		_ = updateOrder(ctx, orderRepo, payload.OrderID, func(o *domain.Order) {
+			o.UpdateStatus(domain.OrderStatusPaymentProcessing)
+			o.UpdatePaymentStatus(domain.PaymentStatusProcessing)
+		})
+
+		log.Printf("💳 [Payment] Processing payment for order: %s", payload.OrderID)
+		log.Printf("💳 [Payment] Amount: $%.2f | Method: %s", payload.Amount, payload.PaymentMethod)
+
+		// Simulate payment processing (2 seconds)
+		time.Sleep(2 * time.Second)
+
+		// Simulate payment gateway API call
+		success := simulatePaymentGateway(payload)
+		if !success {
+			_ = updateOrder(ctx, orderRepo, payload.OrderID, func(o *domain.Order) {
+				o.UpdatePaymentStatus(domain.PaymentStatusFailed)
+			})
+			return fmt.Errorf("payment failed for order %s", payload.OrderID)
+		}
+
+		// Persist success into PostgreSQL
+		if err := updateOrder(ctx, orderRepo, payload.OrderID, func(o *domain.Order) {
+			o.UpdatePaymentStatus(domain.PaymentStatusCompleted)
+			o.UpdateStatus(domain.OrderStatusConfirmed)
+		}); err != nil {
+			return err
+		}
+
+		log.Printf("✅ [Payment] Payment processed successfully for order: %s", payload.OrderID)
+		return nil
+	}
 }
 
 // HandlePaymentProcessTask processes payment for an order

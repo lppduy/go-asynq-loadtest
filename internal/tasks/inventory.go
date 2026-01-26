@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/lppduy/go-asynq-loadtest/internal/domain"
+	"github.com/lppduy/go-asynq-loadtest/internal/repository"
 )
 
 const (
@@ -44,6 +46,39 @@ func NewInventoryUpdateTask(orderID string, items []InventoryItem) (*asynq.Task,
 		asynq.Queue("high"),            // High priority
 		asynq.ProcessIn(1*time.Second), // Process quickly
 	), nil
+}
+
+// NewInventoryUpdateHandler returns a handler that also updates order status in PostgreSQL.
+func NewInventoryUpdateHandler(orderRepo repository.OrderRepository) func(context.Context, *asynq.Task) error {
+	return func(ctx context.Context, t *asynq.Task) error {
+		var payload InventoryPayload
+		if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+			return fmt.Errorf("failed to unmarshal inventory payload: %w", err)
+		}
+
+		log.Printf("📦 [Inventory] Updating inventory for order: %s", payload.OrderID)
+		log.Printf("📦 [Inventory] Items to update: %d", len(payload.Items))
+
+		// Simulate inventory update (500ms)
+		time.Sleep(500 * time.Millisecond)
+
+		for _, item := range payload.Items {
+			if err := updateInventoryItem(item); err != nil {
+				return fmt.Errorf("failed to update inventory for product %s: %w", item.ProductID, err)
+			}
+			log.Printf("📦 [Inventory] Updated: %s (qty: %d)", item.ProductID, item.Quantity)
+		}
+
+		// Persist "processing" status (if already confirmed by payment)
+		_ = updateOrder(ctx, orderRepo, payload.OrderID, func(o *domain.Order) {
+			if o.Status == domain.OrderStatusConfirmed {
+				o.UpdateStatus(domain.OrderStatusProcessing)
+			}
+		})
+
+		log.Printf("✅ [Inventory] All items updated for order: %s", payload.OrderID)
+		return nil
+	}
 }
 
 // HandleInventoryUpdateTask updates inventory for order items

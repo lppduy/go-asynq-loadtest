@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/lppduy/go-asynq-loadtest/internal/domain"
+	"github.com/lppduy/go-asynq-loadtest/internal/repository"
 )
 
 const (
@@ -42,6 +44,37 @@ func NewInvoiceGenerateTask(orderID, customerName, customerEmail string, totalAm
 		asynq.Queue("default"),
 		asynq.ProcessIn(5*time.Second), // Generate after 5 seconds
 	), nil
+}
+
+// NewInvoiceGenerateHandler returns a handler that also updates invoice_url in PostgreSQL.
+func NewInvoiceGenerateHandler(orderRepo repository.OrderRepository) func(context.Context, *asynq.Task) error {
+	return func(ctx context.Context, t *asynq.Task) error {
+		var payload InvoicePayload
+		if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+			return fmt.Errorf("failed to unmarshal invoice payload: %w", err)
+		}
+
+		log.Printf("🧾 [Invoice] Generating invoice for order: %s", payload.OrderID)
+		log.Printf("🧾 [Invoice] Customer: %s | Amount: $%.2f", payload.CustomerName, payload.TotalAmount)
+
+		// Simulate PDF generation (3 seconds)
+		time.Sleep(3 * time.Second)
+
+		invoiceURL, err := generateInvoicePDF(payload)
+		if err != nil {
+			return fmt.Errorf("failed to generate invoice PDF: %w", err)
+		}
+
+		// Persist invoice URL into PostgreSQL
+		if err := updateOrder(ctx, orderRepo, payload.OrderID, func(o *domain.Order) {
+			o.InvoiceURL = invoiceURL
+		}); err != nil {
+			return err
+		}
+
+		log.Printf("✅ [Invoice] Invoice generated: %s", invoiceURL)
+		return nil
+	}
 }
 
 // HandleInvoiceGenerateTask generates PDF invoice for order

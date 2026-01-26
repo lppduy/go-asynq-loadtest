@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
@@ -18,13 +19,15 @@ import (
 type OrderHandler struct {
 	service     service.OrderService
 	asynqClient *asynq.Client
+	taskRetention time.Duration
 }
 
 // NewOrderHandler creates a new order handler
-func NewOrderHandler(service service.OrderService, asynqClient *asynq.Client) *OrderHandler {
+func NewOrderHandler(service service.OrderService, asynqClient *asynq.Client, taskRetention time.Duration) *OrderHandler {
 	return &OrderHandler{
 		service:     service,
 		asynqClient: asynqClient,
+		taskRetention: taskRetention,
 	}
 }
 
@@ -187,12 +190,17 @@ func (h *OrderHandler) GetOrderStatus(c *gin.Context) {
 
 // enqueueOrderTasks enqueues all background tasks for order processing
 func (h *OrderHandler) enqueueOrderTasks(order *domain.Order) {
+	var enqueueOpts []asynq.Option
+	if h.taskRetention > 0 {
+		enqueueOpts = append(enqueueOpts, asynq.Retention(h.taskRetention))
+	}
+
 	// 1. Payment Processing (Critical Queue - highest priority)
 	paymentTask, err := tasks.NewPaymentProcessTask(order.ID, order.TotalAmount, order.PaymentMethod)
 	if err != nil {
 		log.Printf("❌ Failed to create payment task: %v", err)
 	} else {
-		if _, err := h.asynqClient.Enqueue(paymentTask); err != nil {
+		if _, err := h.asynqClient.Enqueue(paymentTask, enqueueOpts...); err != nil {
 			log.Printf("❌ Failed to enqueue payment task: %v", err)
 		} else {
 			log.Printf("📤 [Enqueued] Payment task for order: %s", order.ID)
@@ -211,7 +219,7 @@ func (h *OrderHandler) enqueueOrderTasks(order *domain.Order) {
 	if err != nil {
 		log.Printf("❌ Failed to create inventory task: %v", err)
 	} else {
-		if _, err := h.asynqClient.Enqueue(inventoryTask); err != nil {
+		if _, err := h.asynqClient.Enqueue(inventoryTask, enqueueOpts...); err != nil {
 			log.Printf("❌ Failed to enqueue inventory task: %v", err)
 		} else {
 			log.Printf("📤 [Enqueued] Inventory task for order: %s", order.ID)
@@ -228,7 +236,7 @@ func (h *OrderHandler) enqueueOrderTasks(order *domain.Order) {
 	if err != nil {
 		log.Printf("❌ Failed to create email task: %v", err)
 	} else {
-		if _, err := h.asynqClient.Enqueue(emailTask); err != nil {
+		if _, err := h.asynqClient.Enqueue(emailTask, enqueueOpts...); err != nil {
 			log.Printf("❌ Failed to enqueue email task: %v", err)
 		} else {
 			log.Printf("📤 [Enqueued] Email task for order: %s", order.ID)
@@ -245,7 +253,7 @@ func (h *OrderHandler) enqueueOrderTasks(order *domain.Order) {
 	if err != nil {
 		log.Printf("❌ Failed to create invoice task: %v", err)
 	} else {
-		if _, err := h.asynqClient.Enqueue(invoiceTask); err != nil {
+		if _, err := h.asynqClient.Enqueue(invoiceTask, enqueueOpts...); err != nil {
 			log.Printf("❌ Failed to enqueue invoice task: %v", err)
 		} else {
 			log.Printf("📤 [Enqueued] Invoice task for order: %s", order.ID)
@@ -263,7 +271,7 @@ func (h *OrderHandler) enqueueOrderTasks(order *domain.Order) {
 	if err != nil {
 		log.Printf("❌ Failed to create analytics task: %v", err)
 	} else {
-		if _, err := h.asynqClient.Enqueue(analyticsTask); err != nil {
+		if _, err := h.asynqClient.Enqueue(analyticsTask, enqueueOpts...); err != nil {
 			log.Printf("❌ Failed to enqueue analytics task: %v", err)
 		} else {
 			log.Printf("📤 [Enqueued] Analytics task for order: %s", order.ID)
@@ -287,7 +295,7 @@ func (h *OrderHandler) enqueueOrderTasks(order *domain.Order) {
 	if err != nil {
 		log.Printf("❌ Failed to create warehouse task: %v", err)
 	} else {
-		if _, err := h.asynqClient.Enqueue(warehouseTask); err != nil {
+		if _, err := h.asynqClient.Enqueue(warehouseTask, enqueueOpts...); err != nil {
 			log.Printf("❌ Failed to enqueue warehouse task: %v", err)
 		} else {
 			log.Printf("📤 [Enqueued] Warehouse task for order: %s", order.ID)

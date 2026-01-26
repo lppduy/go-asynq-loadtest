@@ -40,6 +40,9 @@ type RedisConfig struct {
 // WorkerConfig holds Asynq worker configuration
 type WorkerConfig struct {
 	Concurrency int // Number of concurrent workers
+	// RetentionMinutes controls how long to keep completed/failed task records in Redis
+	// so they show up in Asynqmon (0 = do not keep).
+	RetentionMinutes int
 }
 
 // Load reads configuration from environment variables
@@ -64,6 +67,7 @@ func Load() (*Config, error) {
 		},
 		Worker: WorkerConfig{
 			Concurrency: getEnvAsInt("WORKER_CONCURRENCY", 20),
+			RetentionMinutes: getEnvAsInt("ASYNQ_RETENTION_MINUTES", 30),
 		},
 	}
 

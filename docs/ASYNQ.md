@@ -23,6 +23,25 @@ Complete guide to understanding Asynq and how it's used in this project.
 
 ---
 
+## 🧾 Task Retention (Completed/Failed visibility in Asynqmon)
+
+By default, Asynq removes completed tasks from Redis immediately after processing. This means the **Processed counter** increases, but the **Completed tab may show 0 tasks**.
+
+In this project we enable retention on enqueue so completed tasks remain visible in Asynqmon for debugging.
+
+### Configure
+
+- **Env var**: `ASYNQ_RETENTION_MINUTES`
+- **Default**: `30`
+- **Disable**: set to `0` (reduces Redis memory usage during large load tests)
+
+### Notes
+
+- Retention is helpful in development and for capturing screenshots.
+- For heavy load tests, you may want to reduce retention to keep Redis memory stable.
+
+---
+
 ## 🏗️ Architecture
 
 ```

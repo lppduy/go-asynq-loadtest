@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
@@ -55,7 +56,8 @@ func main() {
 	// Initialize layers (Dependency Injection)
 	orderRepo := repository.NewGormOrderRepository(db)
 	orderService := service.NewOrderService(orderRepo)
-	orderHandler := handler.NewOrderHandler(orderService, asynqClient)
+	taskRetention := time.Duration(cfg.Worker.RetentionMinutes) * time.Minute
+	orderHandler := handler.NewOrderHandler(orderService, asynqClient, taskRetention)
 
 	// Setup Gin router
 	router := gin.Default()

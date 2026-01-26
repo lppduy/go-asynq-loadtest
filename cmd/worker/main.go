@@ -9,7 +9,9 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/lppduy/go-asynq-loadtest/internal/config"
+	"github.com/lppduy/go-asynq-loadtest/internal/repository"
 	"github.com/lppduy/go-asynq-loadtest/internal/tasks"
+	"github.com/lppduy/go-asynq-loadtest/pkg/database"
 )
 
 func main() {
@@ -27,6 +29,25 @@ func main() {
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
 	}
+
+	// Connect to PostgreSQL (so tasks can update order status)
+	dbConfig := database.Config{
+		Host:     cfg.Database.Host,
+		Port:     cfg.Database.Port,
+		User:     cfg.Database.User,
+		Password: cfg.Database.Password,
+		DBName:   cfg.Database.DBName,
+		SSLMode:  cfg.Database.SSLMode,
+	}
+	db, err := database.Connect(dbConfig)
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+	// Ensure schema exists
+	if err := database.AutoMigrate(db); err != nil {
+		log.Fatal("Failed to run migrations:", err)
+	}
+	orderRepo := repository.NewGormOrderRepository(db)
 
 	// Create Asynq server with queue configuration
 	srv := asynq.NewServer(
@@ -58,18 +79,18 @@ func main() {
 
 	// Register task handlers
 	// Critical queue
-	mux.HandleFunc(tasks.TypePaymentProcess, tasks.HandlePaymentProcessTask)
+	mux.HandleFunc(tasks.TypePaymentProcess, tasks.NewPaymentProcessHandler(orderRepo))
 
 	// High queue
-	mux.HandleFunc(tasks.TypeInventoryUpdate, tasks.HandleInventoryUpdateTask)
+	mux.HandleFunc(tasks.TypeInventoryUpdate, tasks.NewInventoryUpdateHandler(orderRepo))
 
 	// Default queue
 	mux.HandleFunc(tasks.TypeEmailConfirmation, tasks.HandleEmailConfirmationTask)
-	mux.HandleFunc(tasks.TypeInvoiceGenerate, tasks.HandleInvoiceGenerateTask)
+	mux.HandleFunc(tasks.TypeInvoiceGenerate, tasks.NewInvoiceGenerateHandler(orderRepo))
 
 	// Low queue
 	mux.HandleFunc(tasks.TypeAnalyticsTrack, tasks.HandleAnalyticsTrackTask)
-	mux.HandleFunc(tasks.TypeWarehouseNotify, tasks.HandleWarehouseNotifyTask)
+	mux.HandleFunc(tasks.TypeWarehouseNotify, tasks.NewWarehouseNotifyHandler(orderRepo))
 
 	log.Println("✅ Worker registered task handlers:")
 	log.Println("   💳 [Critical] payment:process")

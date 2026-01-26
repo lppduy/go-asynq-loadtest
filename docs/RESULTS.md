@@ -435,6 +435,8 @@ To add screenshots after running tests:
 
 All three load tests have been executed successfully, demonstrating exceptional system performance and reliability.
 
+> **Note:** After enabling DB updates in background tasks and task retention for Asynqmon, you should **re-run** the benchmarks if you want the results to reflect the new behavior. The numbers in this document were captured before DB-writing tasks were enabled.
+
 ### **Test Results Summary:**
 
 ```yaml

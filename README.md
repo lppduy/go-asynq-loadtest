@@ -167,6 +167,12 @@ sleep 10
 
 ---
 
+### 🧾 Note on Order Status & Asynq Task History
+
+- **Order status**: background tasks now update the order in PostgreSQL (e.g., `pending` → `payment_processing` → `confirmed` → `processing` → `shipped`).
+- **Asynqmon Completed tab**: completed tasks are visible because we enable retention.
+  - Configure via `ASYNQ_RETENTION_MINUTES` (default: `30`). Set to `0` to disable retention (lower Redis memory usage).
+
 ### Run Basic Load Test (50 users, 4 minutes)
 
 ```bash
