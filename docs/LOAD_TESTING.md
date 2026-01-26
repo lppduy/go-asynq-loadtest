@@ -107,29 +107,23 @@ docker run --rm -i --network=host grafana/k6 run - <loadtest/basic-load.js
 
 ### **Before running tests:**
 
-1. **Start infrastructure:**
-```bash
-docker-compose up -d
-```
+Make sure system is running (see [README.md](../README.md#quick-start)):
 
-2. **Start API & Worker:**
 ```bash
-# Terminal 1
+# 1. Start infrastructure
+docker-compose up -d
+
+# 2. Start API (Terminal 1)
 go run cmd/api/main.go
 
-# Terminal 2
+# 3. Start Worker (Terminal 2)
 go run cmd/worker/main.go
-```
 
-3. **Verify system:**
-```bash
+# 4. Verify
 curl http://localhost:8080/health
 ```
 
-4. **Open Asynqmon:**
-```
-http://localhost:8085
-```
+**Monitor:** http://localhost:8085
 
 ---
 
