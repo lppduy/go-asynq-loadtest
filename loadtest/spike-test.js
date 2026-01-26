@@ -5,7 +5,7 @@ import { check, sleep } from 'k6';
 export const options = {
   stages: [
     { duration: '30s', target: 10 },   // Warm up
-    { duration: '10s', target: 200 },  // SPIKE! 10 → 200 users trong 10s
+    { duration: '10s', target: 200 },  // SPIKE! 10 → 200 users in 10s
     { duration: '1m', target: 200 },   // Stay at spike
     { duration: '10s', target: 10 },   // Drop back down
     { duration: '30s', target: 0 },    // Cool down
