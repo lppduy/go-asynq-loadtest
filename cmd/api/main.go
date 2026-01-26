@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
+	"github.com/lppduy/go-asynq-loadtest/internal/config"
 	"github.com/lppduy/go-asynq-loadtest/internal/handler"
 	"github.com/lppduy/go-asynq-loadtest/internal/repository"
 	"github.com/lppduy/go-asynq-loadtest/internal/service"
@@ -14,14 +16,20 @@ import (
 func main() {
 	log.Println("🚀 Starting Order Processing API...")
 
-	// Database configuration (from environment or defaults)
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal("Failed to load config:", err)
+	}
+
+	// Database configuration
 	dbConfig := database.Config{
-		Host:     getEnv("DB_HOST", "localhost"),
-		Port:     getEnv("DB_PORT", "5432"),
-		User:     getEnv("DB_USER", "admin"),
-		Password: getEnv("DB_PASSWORD", "secret123"),
-		DBName:   getEnv("DB_NAME", "taskqueue"),
-		SSLMode:  getEnv("DB_SSLMODE", "disable"),
+		Host:     cfg.Database.Host,
+		Port:     cfg.Database.Port,
+		User:     cfg.Database.User,
+		Password: cfg.Database.Password,
+		DBName:   cfg.Database.DBName,
+		SSLMode:  cfg.Database.SSLMode,
 	}
 
 	// Connect to database
@@ -35,10 +43,20 @@ func main() {
 		log.Fatal("Failed to run migrations:", err)
 	}
 
+	// Create Asynq client for enqueueing tasks
+	asynqClient := asynq.NewClient(asynq.RedisClientOpt{
+		Addr:     cfg.Redis.Addr,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+	defer asynqClient.Close()
+
+	log.Printf("✅ Connected to Redis: %s", cfg.Redis.Addr)
+
 	// Initialize layers (Dependency Injection)
 	orderRepo := repository.NewGormOrderRepository(db)
 	orderService := service.NewOrderService(orderRepo)
-	orderHandler := handler.NewOrderHandler(orderService)
+	orderHandler := handler.NewOrderHandler(orderService, asynqClient)
 
 	// Setup Gin router
 	router := gin.Default()
@@ -67,7 +85,7 @@ func main() {
 	}
 
 	// Start server
-	port := ":8080"
+	port := ":" + cfg.Server.Port
 	log.Printf("✅ API server running on http://localhost%s", port)
 	log.Println("📚 Endpoints:")
 	log.Println("   - POST   /api/v1/orders          (Create order)")
@@ -76,17 +94,13 @@ func main() {
 	log.Println("   - GET    /api/v1/orders/:id/status (Get status)")
 	log.Println("   - POST   /api/v1/orders/:id/cancel (Cancel order)")
 	log.Println("")
-	log.Println("💡 Try: curl http://localhost:8080/health")
+	log.Printf("💡 Try: curl http://localhost:%s/health", cfg.Server.Port)
+	log.Println("")
+	log.Println("📋 Background tasks will be processed by worker")
+	log.Println("   Start worker: go run cmd/worker/main.go")
+	log.Println("   Monitor tasks: http://localhost:8085 (Asynqmon)")
 
 	if err := router.Run(port); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
-}
-
-// getEnv gets environment variable or returns default value
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }

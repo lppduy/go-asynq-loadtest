@@ -7,12 +7,14 @@ Background job processing with Go, Asynq, and Redis. Includes K6 load testing.
 ## 🎯 Features
 
 - ✅ **REST API** - Order processing with Gin framework
-- ✅ **Background Jobs** - Async payment, email, inventory, invoice generation
+- ✅ **Background Jobs** - Async payment, email, inventory, invoice generation (Asynq)
 - ✅ **Priority Queues** - Critical (payment), high (inventory), default (email), low (analytics)
-- ✅ **Task Scheduling** - Delayed and periodic tasks
+- ✅ **Task Retries** - Automatic retry with exponential backoff
+- ✅ **Worker Pool** - Configurable concurrent workers (default: 20)
 - ✅ **Load Testing** - K6 scripts for performance testing
 - ✅ **Monitoring** - Asynqmon dashboard, Prometheus metrics
 - ✅ **Docker Support** - Multi-container setup with Docker Compose
+- ✅ **PostgreSQL + GORM** - Persistent data storage with ORM
 
 ## 🏗️ Architecture
 
@@ -147,7 +149,11 @@ go run cmd/worker/main.go
 - **Prometheus**: http://localhost:9090 (Metrics)
 - **Grafana**: http://localhost:3000 (Dashboards - admin/admin)
 
-### 7. Test API with cURL
+### 7. Open Asynqmon Dashboard
+
+Visit http://localhost:8085 to monitor background tasks in real-time.
+
+### 8. Test API with cURL
 
 ```bash
 # Health check
@@ -197,6 +203,26 @@ curl http://localhost:8080/api/v1/orders/ORD-12345678/status
 curl -X POST http://localhost:8080/api/v1/orders/ORD-12345678/cancel \
   -H "Content-Type: application/json" \
   -d '{"reason": "Customer changed their mind"}'
+```
+
+## 🧪 Complete Testing Guide
+
+For detailed end-to-end testing instructions, see [TESTING.md](TESTING.md).
+
+Quick test:
+```bash
+# Terminal 1: Start API
+go run cmd/api/main.go
+
+# Terminal 2: Start Worker
+go run cmd/worker/main.go
+
+# Terminal 3: Create order
+curl -X POST http://localhost:8080/api/v1/orders \
+  -H "Content-Type: application/json" \
+  -d '{"customer_id":"test","customer_email":"test@example.com",...}'
+
+# Watch logs in Terminal 1 & 2 to see tasks being processed!
 ```
 
 ## 📊 Load Testing

@@ -6,20 +6,26 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 	"github.com/lppduy/go-asynq-loadtest/internal/domain"
 	"github.com/lppduy/go-asynq-loadtest/internal/dto"
 	"github.com/lppduy/go-asynq-loadtest/internal/repository"
 	"github.com/lppduy/go-asynq-loadtest/internal/service"
+	"github.com/lppduy/go-asynq-loadtest/internal/tasks"
 )
 
 // OrderHandler handles order HTTP requests
 type OrderHandler struct {
-	service service.OrderService
+	service     service.OrderService
+	asynqClient *asynq.Client
 }
 
 // NewOrderHandler creates a new order handler
-func NewOrderHandler(service service.OrderService) *OrderHandler {
-	return &OrderHandler{service: service}
+func NewOrderHandler(service service.OrderService, asynqClient *asynq.Client) *OrderHandler {
+	return &OrderHandler{
+		service:     service,
+		asynqClient: asynqClient,
+	}
 }
 
 // CreateOrder handles POST /api/v1/orders
@@ -46,17 +52,12 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	// TODO: Enqueue background tasks
-	// - payment:process (critical queue)
-	// - inventory:update (high queue)
-	// - email:confirmation (default queue)
-	// - invoice:generate (default queue)
-	// - analytics:track (low queue)
-	// - warehouse:notify (low queue)
+	// Enqueue background tasks (non-blocking, fast response)
+	go h.enqueueOrderTasks(order)
 
 	log.Printf("✅ Order created: %s | Total: $%.2f | Items: %d", 
 		order.ID, order.TotalAmount, len(order.Items))
-	log.Printf("📋 Background tasks will be processed asynchronously")
+	log.Printf("📋 Background tasks enqueued asynchronously")
 
 	// Return response immediately (fast response!)
 	c.JSON(http.StatusCreated, toOrderResponse(order))
@@ -182,6 +183,118 @@ func (h *OrderHandler) GetOrderStatus(c *gin.Context) {
 		PaymentStatus: string(order.PaymentStatus),
 		UpdatedAt:     order.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	})
+}
+
+// enqueueOrderTasks enqueues all background tasks for order processing
+func (h *OrderHandler) enqueueOrderTasks(order *domain.Order) {
+	// 1. Payment Processing (Critical Queue - highest priority)
+	paymentTask, err := tasks.NewPaymentProcessTask(order.ID, order.TotalAmount, order.PaymentMethod)
+	if err != nil {
+		log.Printf("❌ Failed to create payment task: %v", err)
+	} else {
+		if _, err := h.asynqClient.Enqueue(paymentTask); err != nil {
+			log.Printf("❌ Failed to enqueue payment task: %v", err)
+		} else {
+			log.Printf("📤 [Enqueued] Payment task for order: %s", order.ID)
+		}
+	}
+
+	// 2. Inventory Update (High Queue)
+	inventoryItems := make([]tasks.InventoryItem, len(order.Items))
+	for i, item := range order.Items {
+		inventoryItems[i] = tasks.InventoryItem{
+			ProductID: item.ProductID,
+			Quantity:  item.Quantity,
+		}
+	}
+	inventoryTask, err := tasks.NewInventoryUpdateTask(order.ID, inventoryItems)
+	if err != nil {
+		log.Printf("❌ Failed to create inventory task: %v", err)
+	} else {
+		if _, err := h.asynqClient.Enqueue(inventoryTask); err != nil {
+			log.Printf("❌ Failed to enqueue inventory task: %v", err)
+		} else {
+			log.Printf("📤 [Enqueued] Inventory task for order: %s", order.ID)
+		}
+	}
+
+	// 3. Email Confirmation (Default Queue)
+	emailTask, err := tasks.NewEmailConfirmationTask(
+		order.ID,
+		order.CustomerEmail,
+		order.CustomerID, // Using customer ID as name for demo
+		order.TotalAmount,
+	)
+	if err != nil {
+		log.Printf("❌ Failed to create email task: %v", err)
+	} else {
+		if _, err := h.asynqClient.Enqueue(emailTask); err != nil {
+			log.Printf("❌ Failed to enqueue email task: %v", err)
+		} else {
+			log.Printf("📤 [Enqueued] Email task for order: %s", order.ID)
+		}
+	}
+
+	// 4. Invoice Generation (Default Queue)
+	invoiceTask, err := tasks.NewInvoiceGenerateTask(
+		order.ID,
+		order.CustomerID,
+		order.CustomerEmail,
+		order.TotalAmount,
+	)
+	if err != nil {
+		log.Printf("❌ Failed to create invoice task: %v", err)
+	} else {
+		if _, err := h.asynqClient.Enqueue(invoiceTask); err != nil {
+			log.Printf("❌ Failed to enqueue invoice task: %v", err)
+		} else {
+			log.Printf("📤 [Enqueued] Invoice task for order: %s", order.ID)
+		}
+	}
+
+	// 5. Analytics Tracking (Low Queue)
+	analyticsTask, err := tasks.NewAnalyticsTrackTask(
+		order.ID,
+		order.CustomerID,
+		order.TotalAmount,
+		len(order.Items),
+		order.PaymentMethod,
+	)
+	if err != nil {
+		log.Printf("❌ Failed to create analytics task: %v", err)
+	} else {
+		if _, err := h.asynqClient.Enqueue(analyticsTask); err != nil {
+			log.Printf("❌ Failed to enqueue analytics task: %v", err)
+		} else {
+			log.Printf("📤 [Enqueued] Analytics task for order: %s", order.ID)
+		}
+	}
+
+	// 6. Warehouse Notification (Low Queue)
+	shippingAddr := fmt.Sprintf("%s, %s, %s %s", 
+		order.ShippingAddress.Street,
+		order.ShippingAddress.City,
+		order.ShippingAddress.State,
+		order.ShippingAddress.PostalCode,
+	)
+	warehouseTask, err := tasks.NewWarehouseNotifyTask(
+		order.ID,
+		order.CustomerID,
+		shippingAddr,
+		len(order.Items),
+		"standard", // Default priority
+	)
+	if err != nil {
+		log.Printf("❌ Failed to create warehouse task: %v", err)
+	} else {
+		if _, err := h.asynqClient.Enqueue(warehouseTask); err != nil {
+			log.Printf("❌ Failed to enqueue warehouse task: %v", err)
+		} else {
+			log.Printf("📤 [Enqueued] Warehouse task for order: %s", order.ID)
+		}
+	}
+
+	log.Printf("✅ All background tasks enqueued for order: %s", order.ID)
 }
 
 // Helper function to convert domain.Order to dto.OrderResponse
