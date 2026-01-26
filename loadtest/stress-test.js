@@ -88,7 +88,7 @@ function textSummary(data) {
   summary += `⚡ Request Rate: ${data.metrics.http_reqs.values.rate.toFixed(2)} req/s\n`;
   summary += `⏱️  Avg Response: ${data.metrics.http_req_duration.values.avg.toFixed(2)}ms\n`;
   summary += `🔥 Max Response: ${data.metrics.http_req_duration.values.max.toFixed(2)}ms\n`;
-  summary += `❌ Failed: ${data.metrics.http_req_failed.values.passes || 0}\n`;
+  summary += `❌ Failed: ${data.metrics.http_req_failed?.values?.passes || 0}\n`;
   summary += `👥 Max Users: ${data.metrics.vus_max.values.max}\n\n`;
   
   return summary;

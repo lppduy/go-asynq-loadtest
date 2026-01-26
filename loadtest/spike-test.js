@@ -76,8 +76,8 @@ function textSummary(data) {
   summary += `📊 Total Requests: ${data.metrics.http_reqs.values.count}\n`;
   summary += `⚡ Peak Request Rate: ${data.metrics.http_reqs.values.rate.toFixed(2)} req/s\n`;
   summary += `⏱️  Avg Response: ${data.metrics.http_req_duration.values.avg.toFixed(2)}ms\n`;
-  summary += `🔥 p(95) Response: ${data.metrics.http_req_duration.values['p(95)'].toFixed(2)}ms\n`;
-  summary += `❌ Failed: ${data.metrics.http_req_failed.values.passes || 0} (${((data.metrics.http_req_failed.values.rate || 0) * 100).toFixed(2)}%)\n`;
+  summary += `🔥 p(95) Response: ${(data.metrics.http_req_duration.values['p(95)'] || 0).toFixed(2)}ms\n`;
+  summary += `❌ Failed: ${data.metrics.http_req_failed?.values?.passes || 0} (${((data.metrics.http_req_failed?.values?.rate || 0) * 100).toFixed(2)}%)\n`;
   summary += `👥 Max Concurrent Users: ${data.metrics.vus_max.values.max}\n\n`;
   
   summary += `🎯 Key Observations:\n`;
