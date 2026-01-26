@@ -178,7 +178,9 @@ k6 run loadtest/basic-load.js
 running (2m30s), 35/50 VUs
 ✓ order created status is 201
 ✓ response time < 200ms
-http_req_duration: avg=10.16ms p(95)=44.97ms
+http_req_duration: avg=9.82ms p(95)=45.40ms
+
+Final results: 17,592 requests, 72.94 req/s, 0% errors
 ```
 
 ### Run Stress Test (Find Breaking Point)

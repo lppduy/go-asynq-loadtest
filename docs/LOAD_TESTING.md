@@ -159,22 +159,22 @@ k6 run --out json=loadtest/results/basic-load.json loadtest/basic-load.js
 
 **You'll see:**
 ```
-running (4m00s), 00/50 VUs, 1234 complete and 0 interrupted iterations
+running (4m01.2s), 00/50 VUs, 4398 complete and 0 interrupted iterations
 default ✓ [======================================] 00/50 VUs  4m0s
 
 ✅ Basic Load Test Summary
 ==================================================
 
 📊 Requests:
-  Total: 4936
-  Rate: 20.56 req/s
+  Total: 17592
+  Rate: 72.94 req/s
 
 ⏱️  Response Time:
-  Avg: 45.23ms
-  Min: 12.45ms
-  Max: 234.56ms
-  p(95): 89.12ms
-  p(99): 145.34ms
+  Avg: 9.82ms
+  Min: 0.09ms
+  Max: 246.29ms
+  p(95): 45.40ms
+  p(99): 0.00ms
 
 ❌ Errors:
   Failed Requests: 0
