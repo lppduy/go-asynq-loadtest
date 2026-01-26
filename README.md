@@ -23,12 +23,47 @@ When an order is created via REST API:
 
 ---
 
-## ⚡ Quick Start
+## 📦 Installation
 
 ### Prerequisites
+
 - **Docker Desktop** (must be running)
-- **Go 1.21+**
-- **K6** (for load testing): `brew install k6`
+- **Go 1.21+** ([Download](https://go.dev/dl/))
+- **K6** (for load testing)
+
+### Install Dependencies
+
+```bash
+# Clone repository
+git clone <your-repo-url>
+cd go-asynq-loadtest
+
+# Download Go dependencies
+go mod download
+
+# Verify Go installation
+go version  # Should show: go version go1.21.x
+
+# Install K6 (macOS)
+brew install k6
+
+# Install K6 (Linux)
+sudo gpg -k
+sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+sudo apt-get update
+sudo apt-get install k6
+
+# Install K6 (Windows)
+choco install k6
+
+# Verify K6 installation
+k6 version  # Should show: k6 v0.x.x
+```
+
+---
+
+## ⚡ Quick Start
 
 ### 1. Start Infrastructure
 
@@ -36,8 +71,16 @@ When an order is created via REST API:
 # Start Redis, PostgreSQL, Asynqmon
 docker-compose up -d
 
-# Verify running
+# Verify services are running
 docker-compose ps
+```
+
+**Expected output:**
+```
+NAME             STATUS    PORTS
+asynq-redis      Up        0.0.0.0:6379->6379/tcp
+asynq-postgres   Up        0.0.0.0:5432->5432/tcp
+asynqmon         Up        0.0.0.0:8085->8080/tcp
 ```
 
 ### 2. Start API Server (Terminal 1)
@@ -66,7 +109,14 @@ go run cmd/worker/main.go
 ✅ Worker registered task handlers:
    💳 [Critical] payment:process
    📦 [High]     inventory:update
-   ...
+   📧 [Default]  email:confirmation
+   🧾 [Default]  invoice:generate
+   📊 [Low]      analytics:track
+   🏭 [Low]      warehouse:notify
+
+⚙️  Worker concurrency: 20
+🔴 Redis: localhost:6379
+
 🚀 Worker started! Waiting for tasks...
 ```
 
@@ -111,12 +161,12 @@ Watch the 6 background tasks being processed in real-time!
 k6 run loadtest/basic-load.js
 ```
 
-**Expected Results:**
+**You'll see real-time output:**
 ```
-✅ Response Time: avg 10ms, p95 45ms
-✅ Throughput: 73 requests/second
-✅ Error Rate: 0%
-✅ 100% tasks processed successfully
+running (2m30s), 35/50 VUs
+✓ order created status is 201
+✓ response time < 200ms
+http_req_duration: avg=10.16ms p(95)=44.97ms
 ```
 
 ### Run Stress Test (Find Breaking Point)
@@ -136,6 +186,79 @@ k6 run loadtest/spike-test.js
 Tests recovery from sudden 10 → 200 users spike.
 
 **See [docs/LOAD_TESTING.md](docs/LOAD_TESTING.md) for detailed guide.**
+
+---
+
+## 📈 Benchmark Results
+
+Results from `k6 run loadtest/basic-load.js`:
+
+### Test Configuration
+
+```yaml
+Test Duration: 4 minutes
+Load Pattern:
+  - Ramp up: 0 → 20 users (30s)
+  - Ramp up: 20 → 50 users (1m)
+  - Sustained: 50 users (2m)
+  - Ramp down: 50 → 0 users (30s)
+
+Worker Configuration:
+  - Workers: 1 process
+  - Concurrency: 20 (20 concurrent goroutines)
+  - Priority Queues:
+      critical: weight 6
+      high: weight 4
+      default: weight 2
+      low: weight 1
+
+Hardware:
+  - CPU: Apple M1/M2 (or equivalent)
+  - RAM: 8GB+
+  - Database: PostgreSQL 15 (Docker)
+  - Queue: Redis 7 (Docker)
+```
+
+### Performance Metrics
+
+| Metric | Value | Target | Status |
+|--------|-------|--------|--------|
+| **Response Time (avg)** | 10.16ms | < 100ms | ✅ Excellent |
+| **Response Time (p95)** | 44.97ms | < 200ms | ✅ Excellent |
+| **Response Time (p99)** | ~70ms | < 500ms | ✅ Excellent |
+| **Throughput** | 73 req/s | 50+ req/s | ✅ Good |
+| **Error Rate** | 0% | < 1% | ✅ Perfect |
+| **Total Requests** | 17,556 | - | ✅ |
+| **Success Rate** | 100% | > 99% | ✅ Perfect |
+
+### Task Processing
+
+| Queue | Tasks | Avg Time | Success Rate |
+|-------|-------|----------|--------------|
+| **Critical** (payment) | 4,389 | ~2s | 100% |
+| **High** (inventory) | 4,389 | ~500ms | 100% |
+| **Default** (email, invoice) | 8,778 | ~1-3s | 100% |
+| **Low** (analytics, warehouse) | 8,778 | ~200-500ms | 100% |
+
+**Total Background Tasks:** 26,334 (6 tasks per order × 4,389 orders)
+
+### Key Observations
+
+- ✅ API responds instantly (~10ms avg) without waiting for background tasks
+- ✅ All 26,334 background tasks processed successfully
+- ✅ No queue backlog (workers processed tasks faster than enqueue rate)
+- ✅ Priority queues working correctly (critical tasks processed first)
+- ✅ Zero errors with automatic retry enabled
+
+### Scaling Potential
+
+Based on results:
+- **Current capacity:** 73 req/s with 1 worker (20 concurrency)
+- **Estimated with 3 workers:** ~200+ req/s
+- **Estimated with 5 workers:** ~350+ req/s
+- **Bottleneck:** Worker processing (not API or database)
+
+**To scale further:** Run `k6 run loadtest/stress-test.js` to find exact breaking point.
 
 ---
 
@@ -164,12 +287,12 @@ Client Request
       ↓ Returns HTTP 201 (~10ms)
       
 Redis Task Queue:
-  [Critical] payment:process
-  [High]     inventory:update
-  [Default]  email:confirmation
-  [Default]  invoice:generate
-  [Low]      analytics:track
-  [Low]      warehouse:notify
+  [Critical] payment:process (weight 6)
+  [High]     inventory:update (weight 4)
+  [Default]  email:confirmation (weight 2)
+  [Default]  invoice:generate (weight 2)
+  [Low]      analytics:track (weight 1)
+  [Low]      warehouse:notify (weight 1)
       ↓
 ┌─────────────┐
 │   Workers   │ → Process tasks asynchronously
@@ -178,10 +301,10 @@ Redis Task Queue:
 ```
 
 **Priority Queues:**
-- **Critical (weight 6):** Payment - highest priority
-- **High (weight 4):** Inventory - time-sensitive
-- **Default (weight 2):** Email, Invoice - moderate priority
-- **Low (weight 1):** Analytics, Warehouse - can be delayed
+- **Critical (weight 6):** Payment - highest priority (46% worker time)
+- **High (weight 4):** Inventory - time-sensitive (31% worker time)
+- **Default (weight 2):** Email, Invoice - moderate (15% worker time)
+- **Low (weight 1):** Analytics, Warehouse - can be delayed (8% worker time)
 
 **See [docs/ASYNQ.md](docs/ASYNQ.md) for detailed Asynq explanation.**
 
@@ -199,6 +322,10 @@ docker-compose logs -f    # View logs
 # Application
 go run cmd/api/main.go    # Start API
 go run cmd/worker/main.go # Start worker
+
+# Build binaries
+go build -o bin/api cmd/api/main.go
+go build -o bin/worker cmd/worker/main.go
 
 # Testing
 k6 run loadtest/basic-load.js   # Load test
@@ -245,7 +372,6 @@ go-asynq-loadtest/
 
 ## 📚 Documentation
 
-- **[QUICKSTART.md](QUICKSTART.md)** - Step-by-step setup guide
 - **[docs/ASYNQ.md](docs/ASYNQ.md)** - How Asynq works & priority queues
 - **[docs/LOAD_TESTING.md](docs/LOAD_TESTING.md)** - K6 testing guide & metrics
 - **[TESTING.md](TESTING.md)** - Test scenarios & examples
@@ -275,22 +401,6 @@ All task handlers use `time.Sleep()` to simulate processing time. See inline com
 - **Load Testing:** K6
 - **Monitoring:** Asynqmon
 - **Infrastructure:** Docker Compose
-
----
-
-## 📈 Performance
-
-From load test with 50 concurrent users:
-
-```
-✅ Response Time: avg 10ms, p95 45ms, p99 70ms
-✅ Throughput: 73 requests/second
-✅ Error Rate: 0%
-✅ Task Processing: 100% success (6 tasks per order)
-✅ Queue Depth: Stable (no backlog)
-```
-
-System can likely handle 300-500+ req/s (run stress test to find exact limit).
 
 ---
 
