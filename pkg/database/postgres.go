@@ -36,7 +36,7 @@ func Connect(cfg Config) (*gorm.DB, error) {
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
-		Now func() time.Time {
+		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
 	})
