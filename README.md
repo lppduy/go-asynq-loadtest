@@ -322,9 +322,9 @@ go-asynq-loadtest/
 │   └── spike-test.js     # Spike recovery
 ├── docs/                 # Detailed documentation
 │   ├── ASYNQ.md          # Asynq explanation
-│   └── LOAD_TESTING.md   # K6 testing guide
-├── docker-compose.yml    # Infrastructure setup
-└── Makefile              # Convenience commands
+│   ├── LOAD_TESTING.md   # K6 testing guide
+│   └── RESULTS.md        # Load test results
+└── docker-compose.yml    # Infrastructure setup
 ```
 
 ---
