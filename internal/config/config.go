@@ -28,6 +28,10 @@ type DatabaseConfig struct {
 	Password string
 	DBName   string
 	SSLMode  string
+	// Connection pool tuning
+	MaxOpenConns        int
+	MaxIdleConns        int
+	ConnMaxLifetimeMins int
 }
 
 // RedisConfig holds Redis configuration
@@ -59,6 +63,9 @@ func Load() (*Config, error) {
 			Password: getEnv("DB_PASSWORD", "secret123"),
 			DBName:   getEnv("DB_NAME", "taskqueue"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
+			MaxOpenConns: getEnvAsInt("DB_MAX_OPEN_CONNS", 200),
+			MaxIdleConns: getEnvAsInt("DB_MAX_IDLE_CONNS", 50),
+			ConnMaxLifetimeMins: getEnvAsInt("DB_CONN_MAX_LIFETIME_MINS", 5),
 		},
 		Redis: RedisConfig{
 			Addr:     getEnv("REDIS_ADDR", "localhost:6379"),

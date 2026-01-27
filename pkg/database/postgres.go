@@ -20,6 +20,9 @@ type Config struct {
 	Password string
 	DBName   string
 	SSLMode  string
+	MaxOpenConns        int
+	MaxIdleConns        int
+	ConnMaxLifetime     time.Duration
 }
 
 // Connect creates a new database connection
@@ -52,9 +55,19 @@ func Connect(cfg Config) (*gorm.DB, error) {
 	}
 
 	// Connection pool settings
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(100)
-	sqlDB.SetConnMaxLifetime(time.Hour)
+	if cfg.MaxIdleConns <= 0 {
+		cfg.MaxIdleConns = 50
+	}
+	if cfg.MaxOpenConns <= 0 {
+		cfg.MaxOpenConns = 200
+	}
+	if cfg.ConnMaxLifetime <= 0 {
+		cfg.ConnMaxLifetime = 5 * time.Minute
+	}
+
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
 
 	log.Println("✅ Database connected successfully")
 	return db, nil
