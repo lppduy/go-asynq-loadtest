@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/lppduy/go-asynq-loadtest/internal/config"
@@ -39,9 +38,6 @@ func main() {
 		Password: cfg.Database.Password,
 		DBName:   cfg.Database.DBName,
 		SSLMode:  cfg.Database.SSLMode,
-		MaxOpenConns: cfg.Database.MaxOpenConns,
-		MaxIdleConns: cfg.Database.MaxIdleConns,
-		ConnMaxLifetime: time.Duration(cfg.Database.ConnMaxLifetimeMins) * time.Minute,
 	}
 	db, err := database.Connect(dbConfig)
 	if err != nil {

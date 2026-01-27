@@ -172,10 +172,6 @@ sleep 10
 - **Order status**: background tasks now update the order in PostgreSQL (e.g., `pending` → `payment_processing` → `confirmed` → `processing` → `shipped`).
 - **Asynqmon Completed tab**: completed tasks are visible because we enable retention.
   - Configure via `ASYNQ_RETENTION_MINUTES` (default: `30`). Set to `0` to disable retention (lower Redis memory usage).
-- **PostgreSQL connection pool**: if you see API failures during Stress Test after enabling DB updates in tasks, tune these env vars:
-  - `DB_MAX_OPEN_CONNS` (default: `200`)
-  - `DB_MAX_IDLE_CONNS` (default: `50`)
-  - `DB_CONN_MAX_LIFETIME_MINS` (default: `5`)
 
 ### Run Basic Load Test (50 users, 4 minutes)
 

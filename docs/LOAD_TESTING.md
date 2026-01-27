@@ -145,21 +145,6 @@ curl http://localhost:8080/health
 
 ---
 
-## 🐘 PostgreSQL Connection Pool Tuning (Recommended)
-
-After enabling DB updates inside background tasks, Stress Test can produce API-level failures due to increased DB contention. You can tune the pool via env vars:
-
-```bash
-export DB_MAX_OPEN_CONNS=200
-export DB_MAX_IDLE_CONNS=50
-export DB_CONN_MAX_LIFETIME_MINS=5
-```
-
-Notes:
-- Increase `DB_MAX_OPEN_CONNS` gradually (e.g., 100 → 150 → 200).
-- Keep `DB_MAX_IDLE_CONNS` reasonably high to avoid reconnect churn.
-- Lower `DB_CONN_MAX_LIFETIME_MINS` (5–15) to recycle stale connections.
-
 ### **Run Basic Load Test:**
 
 ```bash
