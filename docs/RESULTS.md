@@ -102,26 +102,36 @@ Hardware:
 ![Stress Test Results](screenshots/stress-test-k6.png)
 
 **Key Metrics:**
-- **Total Requests:** 218,876
-- **Throughput:** 364.52 req/s (5x faster than Basic Load!)
-- **Response Time (avg):** 13.14ms ⚡ (Only +3.32ms despite 8x users)
-- **Response Time (max):** 1,718.23ms
-- **Failed Requests:** 5 (0.002% failure rate - excellent!)
+- **Total Requests:** 217,766
+- **Throughput:** 362.76 req/s
+- **Response Time (avg):** 15.70ms ⚡
+- **Response Time (max):** 465.80ms
+- **Failed Requests:** 448 (0.206% failure rate)
 - **Max Virtual Users:** 400
-- **Duration:** 10m00.4s
-- **Iterations:** 218,876 completed
+- **Duration:** 10m00.3s
+- **Iterations:** 217,766 completed
 
 **System Behavior at Peak (400 users):**
-- ✅ **No crash or major degradation**
-- ✅ **Average response time remained excellent** (13.14ms)
-- ✅ **99.998% success rate** (5 failures out of 218,876)
-- ⚠️ **Some outliers** (max response 1.7s during peak contention)
+- ✅ **No crash**
+- ✅ **Average response time remained low** (15.70ms)
+- ✅ **99.794% success rate** (448 failures out of 217,766)
+- ⚠️ **Higher failure count after enabling DB writes in tasks** (more DB contention)
 
 **Breaking Point Analysis:**
-- **System did NOT break** at 400 users
-- **Estimated capacity:** 500+ concurrent users
-- **Bottleneck identified:** Worker processing capacity (not API)
-- **Performance degradation:** Minimal (avg response only +3.32ms)
+- **System stayed up** at 400 users, but error rate increased.
+- **Likely bottlenecks:** Postgres connection pool/locks + added DB writes from background tasks.
+- **Worker remains the long-tail bottleneck** (queue backlog & latency).
+
+### Troubleshooting the 448 API Failures
+
+This Stress run was executed after enabling DB updates inside background tasks. That increases PostgreSQL write load and can cause **API-level failures** even when Asynq tasks succeed.
+
+Suggested checks:
+
+- **DB pool**: confirm `SetMaxOpenConns` / `SetMaxIdleConns` in `pkg/database/postgres.go`
+- **API logs**: look for `pq:`, connection errors, timeouts, or deadlocks
+- **Resources**: increase Postgres CPU/RAM, or reduce worker concurrency during stress runs
+- **Retention**: optionally set `ASYNQ_RETENTION_MINUTES=0` for heavy stress tests to reduce Redis memory pressure
 
 ### Asynqmon During Peak Load
 
@@ -134,25 +144,24 @@ Hardware:
 
 | Queue | Size (Pending) | Processed | Failed | Latency | Memory | Error Rate |
 |-------|----------------|-----------|--------|---------|---------|------------|
-| **Critical** | 215,161 | 3,710 | 0 | 8m51.5s | 114 MB | 0.00% |
-| **High** | 216,266 | 2,605 | 0 | 9m1.58s | 113 MB | 0.00% |
-| **Default** | 436,400 | 1,342 | 0 | 9m26.72s | 257 MB | 0.00% |
-| **Low** | 437,111 | 631 | 0 | 9m31.74s | 272 MB | 0.00% |
-| **TOTAL** | ~1.3M | 8,288 | 0 | - | 756 MB | 0.00% |
+| **Critical** | 217,318 | 2,160 | 0 | 8m49.05s | 115 MB | 0.00% |
+| **High** | 217,318 | 1,480 | 0 | 9m4.22s | 114 MB | 0.00% |
+| **Default** | 434,636 | 737 | 0 | 9m29.35s | 260 MB | 0.00% |
+| **Low** | 434,636 | 319 | 0 | 9m34.37s | 269 MB | 0.00% |
+| **TOTAL** | ~1.30M | 4,696 | 0 | - | 758 MB | 0.00% |
 
 **Key Findings:**
-- ✅ **Priority queue still working perfectly:** Critical processed 5.88x more than Low (3,710 vs 631)
+- ✅ **Priority queue still working:** Critical processed 6.77x more than Low (2,160 vs 319)
 - ✅ **Zero task failures** despite extreme load - 100% reliability
-- ✅ **Processing ratio matches config:** Actual 5.9:4.1:2.1:1 vs Expected 6:4:2:1
-- ✅ **Latency scales predictably:** Critical (8m51s) < High (9m1s) < Default (9m26s) < Low (9m31s)
-- ⚠️ **Massive backlog:** 1.3M pending tasks (~18 hours to clear with current capacity)
-- ⚠️ **Worker is bottleneck:** 20 concurrent goroutines insufficient for 364 req/s load
+- ✅ **Latency scales predictably:** Critical (8m49s) < High (9m4s) < Default (9m29s) < Low (9m34s)
+- ⚠️ **Massive backlog:** ~1.30M pending tasks (will take hours to clear with current capacity)
+- ⚠️ **API failures increased** (448) after enabling DB writes in background tasks
 
 **Why K6 Failed ≠ Asynq Failed?**
 
-> **Important:** K6 reports 5 API-level failures (HTTP requests that failed), but Asynq shows 0 task failures. This is because:
+> **Important:** K6 reports **448** API-level failures (HTTP requests that failed), but Asynq shows 0 task failures. This is because:
 > 
-> - **K6 Failures (5):** API layer - requests that timed out, returned errors, or failed to complete
+> - **K6 Failures (448):** API layer - requests that timed out, returned errors, or failed to complete
 >   - Likely causes: Database contention, connection pool exhaustion, response time > threshold
 >   - These requests never successfully enqueued tasks
 > - **Asynq Failures (0):** Worker layer - background tasks that were enqueued and then failed during processing
@@ -246,7 +255,7 @@ Hardware:
 | Test | Users | Duration | Throughput | Avg Response | p(95) Response | Error Rate |
 |------|-------|----------|------------|--------------|----------------|------------|
 | **Basic Load** | 50 | 4m01s | 72.94 req/s | 9.82ms | 45.40ms | 0% ✅ |
-| **Stress** | 400 | 10m00s | 364.52 req/s | 13.14ms | N/A | 0.002% ✅ |
+| **Stress** | 400 | 10m00s | 362.76 req/s | 15.70ms | N/A | 0.206% ⚠️ |
 | **Spike** | 200 (20x) | 2m20s | 314.97 req/s | 26.71ms | 117.07ms | 0% ✅ |
 
 ### Key Findings
@@ -254,7 +263,7 @@ Hardware:
 **API Performance:**
 - ✅ **Excellent scaling:** 13.14ms avg response at 400 users (only +3.32ms vs 50 users)
 - ✅ **5x throughput increase:** 72.94 → 364.52 req/s (8x users → 5x throughput)
-- ✅ **99.998% reliability:** Only 5 failures out of 280,624 total requests across all tests
+- ⚠️ **Reliability (latest runs):** 448 failures in the latest Stress run (0.206%). Basic and Spike runs shown here still had 0 failures.
 - ✅ **Perfect spike resilience:** Zero failures during 20x sudden spike (10 → 200 users in 10s)
 - ✅ **Minimal spike impact:** Response time only 2.7x during spike (9.82ms → 26.71ms)
 - ✅ **No system crash:** Handled 400 concurrent users and 20x spikes without breaking
@@ -281,7 +290,7 @@ Hardware:
 - ✅ **Flash sale ready:** Handles 20x spikes with 0% errors
 - ✅ **Viral event ready:** Quick stabilization and recovery
 - ✅ **DDoS resistant:** System absorbed extreme load without crash
-- ✅ **Mission-critical ready:** 99.998% reliability across all scenarios
+- ⚠️ **Reliability depends on DB-write workload:** after enabling DB updates inside tasks, the Stress run showed higher API-level failures.
 
 ### Observations
 
@@ -465,7 +474,7 @@ All three load tests have been executed successfully, demonstrating exceptional 
 |--------|--------|----------|
 | **Baseline Performance** | ⭐⭐⭐⭐⭐ | 9.82ms avg, 0% errors |
 | **Scalability** | ⭐⭐⭐⭐⭐ | 5x throughput with minimal degradation |
-| **Reliability** | ⭐⭐⭐⭐⭐ | 99.998% success rate (5 failures in 280K requests) |
+| **Reliability** | ⭐⭐⭐⭐☆ | Stress run showed 0.206% API failures after enabling DB writes; Asynq task failures remained 0 |
 | **Spike Resilience** | ⭐⭐⭐⭐⭐ | 0% errors during 20x spike |
 | **Priority Queues** | ⭐⭐⭐⭐⭐ | Perfect 6:4:2:1 ratio in all scenarios |
 | **Worker Reliability** | ⭐⭐⭐⭐⭐ | Zero task failures across 1.6M+ tasks |
@@ -563,7 +572,7 @@ Monitoring:
 This POC has successfully demonstrated that the Asynq-based order processing system is:
 
 1. **Performant** - Sub-30ms response times across all scenarios
-2. **Reliable** - 99.998% success rate (only 5 failures in 280,624 requests)
+2. **Reliable** - Asynq tasks: 0 failures; API reliability depends on DB workload (Stress run: 0.206% failures)
 3. **Scalable** - Handles 5x load with minimal degradation
 4. **Resilient** - Zero failures during 20x sudden spike
 5. **Maintainable** - Clear architecture, excellent monitoring tools
