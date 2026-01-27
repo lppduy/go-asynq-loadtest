@@ -67,7 +67,7 @@ func Load() (*Config, error) {
 		},
 		Worker: WorkerConfig{
 			Concurrency: getEnvAsInt("WORKER_CONCURRENCY", 20),
-			RetentionMinutes: getEnvAsInt("ASYNQ_RETENTION_MINUTES", 30),
+			RetentionMinutes: getEnvAsInt("ASYNQ_RETENTION_MINUTES", 0),
 		},
 	}
 

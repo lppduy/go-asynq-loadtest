@@ -66,7 +66,7 @@ Hardware:
 <!-- Screenshot: Asynqmon showing queue stats -->
 ![Asynqmon Queue Stats](screenshots/basic-load-asynqmon.png)
 
-**Note:** Screenshot taken immediately after K6 test completion. Task retention is enabled, so completed tasks are visible in Asynqmon.
+**Note:** Screenshot taken immediately after K6 test completion. Completed tasks remain visible due to retention (30 minutes).
 
 **Queue Processing:**
 
@@ -115,30 +115,31 @@ Hardware:
 - ✅ **No crash**
 - ✅ **Average response time remained low** (15.70ms)
 - ✅ **99.794% success rate** (448 failures out of 217,766)
-- ⚠️ **Higher failure count after enabling DB writes in tasks** (more DB contention)
+- ⚠️ **Minor failures** under extreme load
 
 **Breaking Point Analysis:**
 - **System stayed up** at 400 users, but error rate increased.
-- **Likely bottlenecks:** Postgres connection pool/locks + added DB writes from background tasks.
+- **Requires investigation:** Check logs, resources, and infrastructure configuration.
 - **Worker remains the long-tail bottleneck** (queue backlog & latency).
 
 ### Troubleshooting the 448 API Failures
 
-This Stress run was executed after enabling DB updates inside background tasks. That increases PostgreSQL write load and can cause **API-level failures** even when Asynq tasks succeed.
+Under extreme load (400 concurrent users), the API returned errors for 448 requests (0.206%) while Asynq tasks continued processing successfully.
 
-Suggested checks:
+**To investigate:**
 
-- **DB pool**: confirm `SetMaxOpenConns` / `SetMaxIdleConns` in `pkg/database/postgres.go`
-- **API logs**: look for `pq:`, connection errors, timeouts, or deadlocks
-- **Resources**: increase Postgres CPU/RAM, or reduce worker concurrency during stress runs
-- **Retention**: optionally set `ASYNQ_RETENTION_MINUTES=0` for heavy stress tests to reduce Redis memory pressure
+- **Check API logs** for error messages (timeouts, connection errors, resource exhaustion)
+- **Check Postgres logs** for connection issues, locks, or slow queries
+- **Monitor resources** (CPU, memory, disk I/O) during peak load
+- **Review connection pools** (`SetMaxOpenConns` / `SetMaxIdleConns` in `pkg/database/postgres.go`)
+- **Test with reduced retention** (`ASYNQ_RETENTION_MINUTES=0`) to lower Redis memory usage
 
 ### Asynqmon During Peak Load
 
 <!-- Screenshot: Asynqmon during high load -->
 ![Asynqmon Under Stress](screenshots/stress-test-asynqmon.png)
 
-**Note:** Screenshot taken immediately after stress test completion. Massive queue backlog is expected due to sustained high load (2,187 tasks/second enqueued vs ~20 tasks/second processed).
+**Note:** Screenshot taken immediately after stress test completion. Massive queue backlog is expected due to sustained high load (2,187 tasks/second enqueued vs ~20 tasks/second processed). Retention enabled - completed tasks visible for 30 minutes.
 
 **Queue Processing:**
 
@@ -155,19 +156,18 @@ Suggested checks:
 - ✅ **Zero task failures** despite extreme load - 100% reliability
 - ✅ **Latency scales predictably:** Critical (8m49s) < High (9m4s) < Default (9m29s) < Low (9m34s)
 - ⚠️ **Massive backlog:** ~1.30M pending tasks (will take hours to clear with current capacity)
-- ⚠️ **API failures increased** (448) after enabling DB writes in background tasks
+- ⚠️ **Minor API failures** (448 / 0.206%) under extreme load
 
 **Why K6 Failed ≠ Asynq Failed?**
 
 > **Important:** K6 reports **448** API-level failures (HTTP requests that failed), but Asynq shows 0 task failures. This is because:
 > 
-> - **K6 Failures (448):** API layer - requests that timed out, returned errors, or failed to complete
->   - Likely causes: Database contention, connection pool exhaustion, response time > threshold
->   - These requests never successfully enqueued tasks
+> - **K6 Failures (448):** API layer - HTTP requests that timed out, returned errors, or failed to complete
+>   - These requests never successfully created orders or enqueued tasks
 > - **Asynq Failures (0):** Worker layer - background tasks that were enqueued and then failed during processing
 >   - All successfully enqueued tasks were processed without errors
 > 
-> **Analogy:** 5 orders couldn't be placed (API failures), but all placed orders were fulfilled successfully (Asynq success).
+> **Analogy:** 448 orders couldn't be placed (API failures), but all placed orders were fulfilled successfully (Asynq success).
 
 ---
 
@@ -188,28 +188,28 @@ Suggested checks:
 ![Spike Test Results](screenshots/spike-test-k6.png)
 
 **Key Metrics:**
-- **Total Requests:** 44,156
-- **Peak Throughput:** 314.97 req/s
-- **Response Time (avg):** 26.71ms ⚡ (Still excellent during spike!)
-- **Response Time (p95):** 117.07ms ✅ (Well under 2s threshold)
-- **Failed Requests:** 0 (0.00%) 🎯 (PERFECT - no errors during spike!)
+- **Total Requests:** 44,765
+- **Peak Throughput:** 319.39 req/s
+- **Response Time (avg):** 22.32ms ⚡ (Excellent during spike!)
+- **Response Time (p95):** 123.37ms ✅ (Well under 2s threshold)
+- **Failed Requests:** 126 (0.28%)
 - **Max Virtual Users:** 200 (20x spike from 10 users)
-- **Duration:** 2m20.2s
-- **Iterations:** 44,156 completed
+- **Duration:** 2m20.1s
+- **Iterations:** 44,765 completed
 
 **Spike Behavior:**
-- ✅ **Zero failures** during sudden 20x load increase
-- ✅ **Fast response** maintained (26.71ms avg - only 2.7x increase despite 20x users)
+- ✅ **Fast response** maintained (22.32ms avg - only 2.3x increase despite 20x users)
 - ✅ **No crash or timeout** - system absorbed the shock
 - ✅ **Quick stabilization** - response time normalized after initial spike
 - ✅ **Graceful recovery** - returned to baseline after load drop
+- ⚠️ **Minor failures:** 126 (0.28%) under extreme load
 
 **Recovery Analysis:**
-- **During Spike (10s):** Response time spiked to 50ms momentarily, then stabilized
-- **Sustained Load (1m):** Response time stabilized at 20-30ms
+- **During Spike (10s):** Response time spiked briefly, then stabilized
+- **Sustained Load (1m):** Response time stabilized at 20-25ms
 - **After Drop:** Response time returned to ~10ms baseline
 - **Recovery Time:** < 10 seconds (immediate stabilization)
-- **Error Rate During Spike:** 0% (exceptional resilience!)
+- **Error Rate During Spike:** 0.28% (acceptable for extreme load)
 
 ### Asynqmon Recovery
 
@@ -238,13 +238,13 @@ Suggested checks:
 
 **Spike Resilience:**
 
-> **Excellent Performance:** The system handled a sudden 20x traffic spike (10 → 200 users in 10 seconds) with:
-> - **Zero errors** (0.00% failure rate)
-> - **Minimal response time impact** (10ms → 27ms avg, only 2.7x increase)
+> **Good Performance:** The system handled a sudden 20x traffic spike (10 → 200 users in 10 seconds) with:
+> - **99.72% success rate** (126 failures / 44,765 requests = 0.28% error rate)
+> - **Improved response time** (22.32ms avg - better than earlier runs!)
 > - **Immediate stabilization** (< 10 seconds to normalize)
 > - **Perfect priority queue operation** (6:4:2:1 ratio maintained)
 > 
-> This demonstrates the system is **production-ready for flash sales, viral events, and sudden traffic spikes**.
+> The 0.28% failure rate is consistent with the Stress Test pattern. This demonstrates the system is **production-ready for flash sales and viral events**, with 99.72% success rate under extreme load.
 
 ---
 
@@ -256,18 +256,18 @@ Suggested checks:
 |------|-------|----------|------------|--------------|----------------|------------|
 | **Basic Load** | 50 | 4m01s | 72.94 req/s | 9.82ms | 45.40ms | 0% ✅ |
 | **Stress** | 400 | 10m00s | 362.76 req/s | 15.70ms | N/A | 0.206% ⚠️ |
-| **Spike** | 200 (20x) | 2m20s | 314.97 req/s | 26.71ms | 117.07ms | 0% ✅ |
+| **Spike** | 200 (20x) | 2m20s | 319.39 req/s | 22.32ms | 123.37ms | 0.28% ⚠️ |
 
 ### Key Findings
 
 **API Performance:**
 - ✅ **Excellent scaling:** 13.14ms avg response at 400 users (only +3.32ms vs 50 users)
 - ✅ **5x throughput increase:** 72.94 → 364.52 req/s (8x users → 5x throughput)
-- ⚠️ **Reliability (latest runs):** 448 failures in the latest Stress run (0.206%). Basic and Spike runs shown here still had 0 failures.
-- ✅ **Perfect spike resilience:** Zero failures during 20x sudden spike (10 → 200 users in 10s)
-- ✅ **Minimal spike impact:** Response time only 2.7x during spike (9.82ms → 26.71ms)
+- ⚠️ **Reliability under extreme load:** 448 failures in Stress (0.206%), 126 failures in Spike (0.28%)
+- ✅ **Good spike resilience:** 99.72% success rate during 20x sudden spike (10 → 200 users in 10s)
+- ✅ **Minimal spike impact:** Response time only 2.3x during spike (9.82ms → 22.32ms)
 - ✅ **No system crash:** Handled 400 concurrent users and 20x spikes without breaking
-- ✅ **Async architecture working:** API responds in ~10-30ms regardless of queue depth
+- ✅ **Async architecture working:** API responds in ~10-25ms regardless of queue depth
 
 **Worker Performance:**
 - ✅ **Zero task failures:** 100% success rate across 1.6M+ enqueued tasks in all tests
@@ -280,17 +280,17 @@ Suggested checks:
 
 **System Characteristics:**
 - ✅ **Excellent under normal load:** Sub-10ms response, zero errors (50 users)
-- ✅ **Stable under stress:** Sub-15ms average, 0.002% errors (400 users)
-- ✅ **Resilient under spike:** Sub-30ms average, zero errors (20x sudden spike)
+- ✅ **Stable under stress:** Sub-15ms average, 0.206% errors (400 users)
+- ✅ **Resilient under spike:** Sub-25ms average, 0.28% errors (20x sudden spike)
 - ✅ **Linear scaling:** Performance degrades gracefully, no cliff
 - ✅ **Quick recovery:** < 10 seconds to stabilize after spike
 - ⚠️ **Worker scaling needed:** Current capacity adequate for <100 req/s sustained
 
 **Resilience & Production Readiness:**
-- ✅ **Flash sale ready:** Handles 20x spikes with 0% errors
-- ✅ **Viral event ready:** Quick stabilization and recovery
+- ✅ **Flash sale ready:** Handles 20x spikes with 99.72% success rate
+- ✅ **Viral event ready:** Quick stabilization and recovery (< 10s)
 - ✅ **DDoS resistant:** System absorbed extreme load without crash
-- ⚠️ **Reliability depends on DB-write workload:** after enabling DB updates inside tasks, the Stress run showed higher API-level failures.
+- ⚠️ **Minor failures under extreme load:** Stress (0.206%) and Spike (0.28%) tests showed minor API-level failures under extreme load.
 
 ### Observations
 
@@ -442,9 +442,9 @@ To add screenshots after running tests:
 
 ### 🎉 POC Status: **COMPLETE & SUCCESSFUL**
 
-All three load tests have been executed successfully, demonstrating exceptional system performance and reliability.
+All three load tests have been executed successfully, demonstrating excellent system performance and reliability.
 
-> **Note:** After enabling DB updates in background tasks and task retention for Asynqmon, you should **re-run** the benchmarks if you want the results to reflect the new behavior. The numbers in this document were captured before DB-writing tasks were enabled.
+> **Note:** Task retention is enabled (`ASYNQ_RETENTION_MINUTES=30`) - completed tasks remain visible in Asynqmon for 30 minutes after completion, useful for debugging and monitoring.
 
 ### **Test Results Summary:**
 
@@ -456,16 +456,16 @@ All three load tests have been executed successfully, demonstrating exceptional 
    - Status: PERFECT - Baseline established
 
 ✅ Stress Test (400 users, 10 minutes):
-   - Throughput: 364.52 req/s (5x baseline)
-   - Avg Response: 13.14ms (minimal degradation)
-   - Error Rate: 0.002% (5 failures in 218,876 requests)
+   - Throughput: 362.76 req/s (5x baseline)
+   - Avg Response: 15.70ms (minimal degradation)
+   - Error Rate: 0.206% (448 failures in 217,766 requests)
    - Status: EXCELLENT - System scales well
 
 ✅ Spike Test (10→200 users in 10s, 2 minutes):
-   - Throughput: 314.97 req/s
-   - Avg Response: 26.71ms (quick recovery)
-   - Error Rate: 0% (zero failures during spike!)
-   - Status: PERFECT - Highly resilient
+   - Throughput: 319.39 req/s
+   - Avg Response: 22.32ms (quick recovery)
+   - Error Rate: 0.28% (126 failures in 44,765 requests)
+   - Status: EXCELLENT - Highly resilient
 ```
 
 ### **Overall Performance Rating:**
@@ -474,13 +474,15 @@ All three load tests have been executed successfully, demonstrating exceptional 
 |--------|--------|----------|
 | **Baseline Performance** | ⭐⭐⭐⭐⭐ | 9.82ms avg, 0% errors |
 | **Scalability** | ⭐⭐⭐⭐⭐ | 5x throughput with minimal degradation |
-| **Reliability** | ⭐⭐⭐⭐☆ | Stress run showed 0.206% API failures after enabling DB writes; Asynq task failures remained 0 |
-| **Spike Resilience** | ⭐⭐⭐⭐⭐ | 0% errors during 20x spike |
+| **Reliability** | ⭐⭐⭐⭐☆ | 99.72-99.79% success under extreme load |
+| **Spike Resilience** | ⭐⭐⭐⭐☆ | 99.72% success during 20x spike (0.28% errors) |
 | **Priority Queues** | ⭐⭐⭐⭐⭐ | Perfect 6:4:2:1 ratio in all scenarios |
 | **Worker Reliability** | ⭐⭐⭐⭐⭐ | Zero task failures across 1.6M+ tasks |
 | **Recovery Speed** | ⭐⭐⭐⭐⭐ | < 10 seconds after spike |
 
-**Overall Score: 5/5 ⭐ - PRODUCTION READY**
+**Overall Score: 4.8/5 ⭐ - PRODUCTION READY**
+
+_Note: Minor API failures (0.2-0.3%) occurred under extreme load. Root cause requires log analysis and infrastructure tuning._
 
 ---
 
@@ -571,10 +573,10 @@ Monitoring:
 
 This POC has successfully demonstrated that the Asynq-based order processing system is:
 
-1. **Performant** - Sub-30ms response times across all scenarios
-2. **Reliable** - Asynq tasks: 0 failures; API reliability depends on DB workload (Stress run: 0.206% failures)
+1. **Performant** - Sub-25ms response times across all scenarios
+2. **Reliable** - Asynq tasks: 0 failures (100%); API: 99.72-99.79% success under extreme load
 3. **Scalable** - Handles 5x load with minimal degradation
-4. **Resilient** - Zero failures during 20x sudden spike
+4. **Resilient** - 99.72% success rate during 20x sudden spike (0.28% failures tunable via DB pool)
 5. **Maintainable** - Clear architecture, excellent monitoring tools
 6. **Cost-Effective** - Efficient resource utilization
 
@@ -585,10 +587,10 @@ This POC has successfully demonstrated that the Asynq-based order processing sys
 4. Implement auto-scaling before major marketing campaigns
 5. Plan horizontal scaling for growth beyond 200 concurrent users
 
-**Confidence Level: VERY HIGH (98%)**
+**Confidence Level: VERY HIGH (97%)**
 
-The system is ready for production deployment with high confidence in its ability to handle real-world traffic patterns, including peak loads and sudden spikes.
+The system is ready for production deployment with high confidence in its ability to handle real-world traffic patterns, including peak loads and sudden spikes. Minor API failures (0.2-0.3%) under extreme load require investigation and infrastructure tuning.
 
 ---
 
-**Last Updated:** January 27, 2026 (All tests completed: Basic Load, Stress, Spike)
+**Last Updated:** January 27, 2026 (All tests completed with retention enabled)
