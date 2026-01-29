@@ -12,14 +12,16 @@ When an order is created via REST API:
 1. **API** saves order to PostgreSQL (~10ms response)
 2. **API** enqueues 6 background tasks to Redis
 3. **Worker** processes tasks asynchronously:
-   - 💳 Payment processing (2s)
-   - 📦 Inventory update (500ms)
-   - 📧 Email confirmation (1s)
-   - 🧾 Invoice generation (3s)
-   - 📊 Analytics tracking (200ms)
-   - 🏭 Warehouse notification (500ms)
+   - 💳 Payment processing
+   - 📦 Inventory update
+   - 📧 Email confirmation
+   - 🧾 Invoice generation
+   - 📊 Analytics tracking
+   - 🏭 Warehouse notification
 
 **Result:** Fast API response + reliable background processing with priority queues and automatic retries.
+
+**Note:** Some external APIs (payment, email) are simulated. Database operations are implemented.
 
 ---
 
